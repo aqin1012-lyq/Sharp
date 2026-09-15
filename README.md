@@ -44,9 +44,12 @@ Sharp/
 
 ### 1. 后端（需 Java 17+ 与 MySQL）
 
+> 数据库的完整搭建与远程连接流程见 [docs/DATABASE.md](docs/DATABASE.md)。
+> 推荐用项目根目录的 `run-backend.sh`（含连接信息，已 gitignore）一键启动。
+
 ```bash
 cd backend
-# 数据库连接可用环境变量覆盖，默认 localhost:3306 / root / 空密码 / 库名 sharp
+# 数据库连接可用环境变量覆盖，默认 127.0.0.1:3307 / root / 库名 sharp
 export DB_HOST=localhost DB_PORT=3306 DB_NAME=sharp DB_USERNAME=root DB_PASSWORD=你的密码
 mvn spring-boot:run
 # 启动后监听 http://localhost:8080

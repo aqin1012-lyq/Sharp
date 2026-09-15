@@ -27,3 +27,6 @@ Thumbs.db
 *.log
 .env
 .env.local
+
+# ===== 本地启动脚本(含数据库密码,勿提交)=====
+run-backend.sh
