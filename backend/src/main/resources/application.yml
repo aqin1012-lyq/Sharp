@@ -2,13 +2,24 @@ spring:
   application:
     name: sharp-backend
   datasource:
-    url: jdbc:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3307}/${DB_NAME:sharp}?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
+    url: jdbc:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3307}/${DB_NAME:sharp}?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true&connectTimeout=10000&socketTimeout=30000
     username: ${DB_USERNAME:root}
     password: ${DB_PASSWORD:sharp123}
     driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      # 跨境高延迟:单条 JDBC 建连约 16s，故常驻热连接、放宽建连超时，避免请求时现建现超时
+      connection-timeout: 40000      # 允许首连/扩容耗时(>16s)
+      validation-timeout: 10000
+      maximum-pool-size: 3
+      minimum-idle: 2                # 保持 2 条热连接,请求直接复用
+      idle-timeout: 0                # 不回收空闲连接,始终保活
+      keepalive-time: 30000          # 每 30s 保活一次,防 NAT 掐断
+      max-lifetime: 1800000
+      initialization-fail-timeout: 0
   jpa:
     hibernate:
-      ddl-auto: update
+      # 远程库表结构由 schema.sql 手动管理；跨境高延迟下关闭启动时的自动 DDL 元数据扫描
+      ddl-auto: none
     show-sql: false
     open-in-view: false
     properties:

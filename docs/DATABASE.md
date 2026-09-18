@@ -116,9 +116,26 @@ sudo iptables -L INPUT -n | head
 
 ## 五、表结构
 
-后端 JPA 配置 `ddl-auto=update`，**首次启动后端会自动在 `sharp` 库建好 `email_account` 表**，无需手动执行建表 SQL。
+后端 JPA 配置 `ddl-auto=none`，**不会自动建表，也不会自动加字段**。表结构由 SQL 脚本手动管理：
 
-如需手动初始化或用于生产版本管理，参考 `backend/src/main/resources/schema.sql`。
+- 新库初始化：`deploy/init-db.sql`（建库 + 建账号 + 建表，服务器上 `sudo mysql < /tmp/init-db.sql`）
+- 结构参考：`backend/src/main/resources/schema.sql`
+
+**已有库补字段**：`CREATE TABLE IF NOT EXISTS` 对已存在的表不生效，加字段要单独执行 ALTER。当前最新一次变更是 `uuid` / `token`：
+
+```sql
+ALTER TABLE `email_account`
+    ADD COLUMN `uuid`  VARCHAR(128) DEFAULT NULL COMMENT 'UUID'  AFTER `cookie`,
+    ADD COLUMN `token` TEXT         DEFAULT NULL COMMENT 'token' AFTER `uuid`,
+    ADD KEY `idx_uuid` (`uuid`);
+```
+
+执行后自检列数应为 19：
+
+```sql
+SELECT COUNT(*) FROM information_schema.COLUMNS
+WHERE TABLE_SCHEMA = 'sharp' AND TABLE_NAME = 'email_account';
+```
 
 ---
 

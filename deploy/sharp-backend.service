@@ -1,0 +1,18 @@
+[Unit]
+Description=Sharp Backend (Spring Boot)
+After=network.target mysql.service
+Wants=mysql.service
+
+[Service]
+Type=simple
+User=sharp-app
+# 数据库连接等敏感信息放此文件(不入库),见 deploy/README 说明
+EnvironmentFile=/etc/sharp/backend.env
+WorkingDirectory=/opt/sharp
+ExecStart=/usr/bin/java -jar /opt/sharp/sharp-backend.jar
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
