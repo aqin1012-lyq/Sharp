@@ -17,6 +17,10 @@
           <el-icon><Message /></el-icon>
           <span>邮箱管理</span>
         </el-menu-item>
+        <el-menu-item index="/mail-reader">
+          <el-icon><Promotion /></el-icon>
+          <span>邮件取件</span>
+        </el-menu-item>
       </el-menu>
     </el-aside>
     <el-container>

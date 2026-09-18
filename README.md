@@ -4,6 +4,10 @@
 
 当前已实现「**邮箱管理**」模块：选择邮箱类型 → 粘贴原始信息 → 自动按结构拆分 → 表格展示并入库。
 
+「**邮件取件**」模块（复刻 [2fa.run/mail](https://2fa.run/mail/)）：用 Outlook 的 `refreshToken + clientId` 经微软 OAuth2 换取 access_token，再通过 Microsoft Graph 实时拉取收件箱 / 垃圾箱的最新邮件并自动提取验证码。凭据可粘贴原始串、从已入库账号选择，或手动填写。相关配置见 `application.yml` 的 `mail-reader.*`（OAuth 端点 / scope / Graph 基址 / 超时，均可用环境变量覆盖）。
+
+> 为何用 Graph 而非 IMAP：个人账号(outlook.com/hotmail/live)的 IMAP OAuth2 自 2024-12 起存在微软服务端回归（token 认证成功但 IMAP 会话被拒），Graph REST 接口不受影响。因此 token 需具备 `Mail.Read` 权限（受众为 `graph.microsoft.com`）。
+
 ## 目录结构
 
 ```
@@ -12,7 +16,7 @@ Sharp/
 │   ├── src/main/java/com/sharp/
 │   │   ├── entity/            # 实体（email_account 表）
 │   │   ├── repository/        # JPA Repository
-│   │   ├── service/           # EmailParserService（原始信息拆分）+ EmailAccountService
+│   │   ├── service/           # EmailParserService（原始信息拆分）+ EmailAccountService + MailReaderService（OAuth2 + Graph 取件）
 │   │   ├── controller/        # REST 接口
 │   │   ├── dto/ common/ config/
 │   │   └── SharpApplication.java
@@ -22,6 +26,7 @@ Sharp/
 └── frontend/         # Vue 3 前端
     └── src/
         ├── views/EmailManage.vue   # 邮箱管理页面
+        ├── views/MailReader.vue    # 邮件取件页面（复刻 2fa.run/mail）
         ├── views/Dashboard.vue
         ├── layout/Layout.vue        # 侧边栏 + 多页面框架
         ├── api/  router/

@@ -18,6 +18,12 @@ const routes = [
         name: 'EmailManage',
         component: () => import('../views/EmailManage.vue'),
         meta: { title: '邮箱管理' }
+      },
+      {
+        path: 'mail-reader',
+        name: 'MailReader',
+        component: () => import('../views/MailReader.vue'),
+        meta: { title: '邮件取件' }
       }
     ]
   }

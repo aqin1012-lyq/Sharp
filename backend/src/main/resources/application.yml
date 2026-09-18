@@ -31,3 +31,18 @@ server:
   port: 8080
   servlet:
     context-path: /
+
+# 邮件取件（复刻 2fa.run/mail）：Outlook 凭据经 OAuth2 换 access_token 后走 Microsoft Graph 读信。
+# 说明：个人账号(outlook.com/hotmail/live)的 IMAP OAuth2 自 2024-12 起有微软服务端回归，改用 Graph。
+mail-reader:
+  # 个人账号用 consumers；企业/学校账号可改 .../common/oauth2/v2.0/token
+  token-url: ${MAIL_TOKEN_URL:https://login.microsoftonline.com/consumers/oauth2/v2.0/token}
+  # 走 Graph 读信，token 受众须为 graph.microsoft.com；至少需要 Mail.Read（读信）+ offline_access（续期）。
+  # 若该 refreshToken 未同意过 Mail.Read，会返回 AADSTS65001，需重新授权时带上该权限。
+  scope: ${MAIL_SCOPE:https://graph.microsoft.com/Mail.Read offline_access}
+  # 首选 scope 被拒(AADSTS70000/65001)时的回退：.default 取该 client 已同意的全部 Graph 权限
+  scope-fallback: ${MAIL_SCOPE_FALLBACK:https://graph.microsoft.com/.default offline_access}
+  # Graph 接口基址，个人账号亦走全球端点 /v1.0
+  graph-base: ${MAIL_GRAPH_BASE:https://graph.microsoft.com/v1.0}
+  connect-timeout-ms: ${MAIL_CONNECT_TIMEOUT:12000}
+  read-timeout-ms: ${MAIL_READ_TIMEOUT:20000}
