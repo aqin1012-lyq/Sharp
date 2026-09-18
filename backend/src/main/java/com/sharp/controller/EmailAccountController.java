@@ -25,13 +25,13 @@ public class EmailAccountController {
     /** 解析预览（不落库） */
     @PostMapping("/parse")
     public Result<List<EmailAccount>> parse(@Valid @RequestBody ParseRequest req) {
-        return Result.ok(service.parse(req.getEmailType(), req.getRawData()));
+        return Result.ok(service.parse(req.getEmailType(), req.getRawData(), req.getFields()));
     }
 
     /** 解析并保存 */
     @PostMapping("/save")
     public Result<List<EmailAccount>> save(@Valid @RequestBody ParseRequest req) {
-        return Result.ok(service.parseAndSave(req.getEmailType(), req.getRawData()));
+        return Result.ok(service.parseAndSave(req.getEmailType(), req.getRawData(), req.getFields()));
     }
 
     /** 分页查询 */

@@ -19,14 +19,14 @@ public class EmailAccountService {
         this.parserService = parserService;
     }
 
-    /** 仅解析预览，不落库。 */
-    public List<EmailAccount> parse(String emailType, String rawData) {
-        return parserService.parseMultiline(emailType, rawData);
+    /** 仅解析预览，不落库。fields 为前端拖拽后的字段顺序，可为空。 */
+    public List<EmailAccount> parse(String emailType, String rawData, List<String> fields) {
+        return parserService.parseMultiline(emailType, rawData, fields);
     }
 
-    /** 解析并保存。 */
-    public List<EmailAccount> parseAndSave(String emailType, String rawData) {
-        List<EmailAccount> parsed = parserService.parseMultiline(emailType, rawData);
+    /** 解析并保存。fields 为前端拖拽后的字段顺序，可为空。 */
+    public List<EmailAccount> parseAndSave(String emailType, String rawData, List<String> fields) {
+        List<EmailAccount> parsed = parserService.parseMultiline(emailType, rawData, fields);
         return repository.saveAll(parsed);
     }
 

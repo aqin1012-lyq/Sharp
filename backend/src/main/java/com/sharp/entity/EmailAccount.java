@@ -15,7 +15,8 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "email_account", indexes = {
         @Index(name = "idx_email_type", columnList = "email_type"),
-        @Index(name = "idx_email", columnList = "email")
+        @Index(name = "idx_email", columnList = "email"),
+        @Index(name = "idx_uuid", columnList = "uuid")
 })
 public class EmailAccount {
 
@@ -40,7 +41,8 @@ public class EmailAccount {
     private String recoveryEmail;
 
     /** key / 备用邮箱密码（gmail） */
-    @Column(name = "recovery_key", length = 512)
+    @Lob
+    @Column(name = "recovery_key", columnDefinition = "TEXT")
     private String recoveryKey;
 
     /** 注册年份（gmail） */
@@ -52,7 +54,8 @@ public class EmailAccount {
     private String country;
 
     /** 辅助验证码 / 2FA 备用码（gmail） */
-    @Column(name = "auth_key", length = 512)
+    @Lob
+    @Column(name = "auth_key", columnDefinition = "TEXT")
     private String authKey;
 
     /** 附加链接：gmail 的链接 / 012e 的取件链接 */
@@ -76,6 +79,15 @@ public class EmailAccount {
     @Lob
     @Column(name = "cookie", columnDefinition = "TEXT")
     private String cookie;
+
+    /** UUID */
+    @Column(name = "uuid", length = 128)
+    private String uuid;
+
+    /** token */
+    @Lob
+    @Column(name = "token", columnDefinition = "TEXT")
+    private String token;
 
     /** 原始信息 */
     @Lob
