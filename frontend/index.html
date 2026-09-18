@@ -4,6 +4,23 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Sharp 管理平台</title>
+    <!-- 首帧背景色兜底，防止样式加载前白闪；值对应 theme.css 的 --ground 浅/深 -->
+    <style>
+      html { background: #f4f6fa; }
+      html.dark { background: #0e1219; }
+    </style>
+    <!-- 在样式/脚本加载前同步定好明暗，默认跟随系统配色，避免主题闪烁 -->
+    <script>
+      (function () {
+        try {
+          var m = localStorage.getItem('sharp-theme');
+          var dark = m === 'dark' ||
+            ((m === 'system' || !m) && window.matchMedia &&
+              window.matchMedia('(prefers-color-scheme: dark)').matches);
+          document.documentElement.classList.toggle('dark', dark);
+        } catch (e) { /* ignore */ }
+      })();
+    </script>
   </head>
   <body>
     <div id="app"></div>

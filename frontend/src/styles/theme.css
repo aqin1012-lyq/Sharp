@@ -1,0 +1,143 @@
+/* ============================================================
+   Sharp 全局主题
+   设计语言参考：token-uuid-swap 稿 —— Archivo/IBM Plex 字体 + 靛蓝主色 + 浅/深双主题
+   同时把配色映射到 Element Plus 的 CSS 变量，统一整站观感。
+   ============================================================ */
+@import url("https://fonts.googleapis.com/css2?family=Archivo:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap");
+
+:root {
+  /* —— 设计系统调色板（浅色） —— */
+  --ground: #f4f6fa;
+  --surface: #ffffff;
+  --surface-2: #eef1f7;
+  --ink: #1a2231;
+  --muted: #616e88;
+  --faint: #8b97ad;
+  --border: #e0e5ef;
+  --border-strong: #cdd4e2;
+  --accent: #4f46e5;
+  --accent-ink: #4f46e5;
+  --accent-soft: #ecebfe;
+  --good: #0f9d6b;
+  --good-soft: #e4f6ee;
+  --bad: #d64545;
+  --bad-soft: #fbe8e8;
+  --swap: #c2740a;
+  --swap-soft: #fdf1dd;
+  --shadow: 0 1px 2px rgba(23, 32, 54, .05), 0 12px 32px -18px rgba(23, 32, 54, .28);
+
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+  --display: "Archivo", var(--sans);
+
+  /* —— 映射到 Element Plus —— */
+  --el-color-primary: var(--accent);
+  --el-color-primary-light-3: #837dec;
+  --el-color-primary-light-5: #a7a2f2;
+  --el-color-primary-light-7: #cbc8f7;
+  --el-color-primary-light-8: #dcdafa;
+  --el-color-primary-light-9: var(--accent-soft);
+  --el-color-primary-dark-2: #3f38b7;
+  --el-color-success: var(--good);
+  --el-color-danger: var(--bad);
+  --el-color-warning: var(--swap);
+
+  --el-bg-color: var(--surface);
+  --el-bg-color-page: var(--ground);
+  --el-bg-color-overlay: var(--surface);
+  --el-text-color-primary: var(--ink);
+  --el-text-color-regular: var(--muted);
+  --el-text-color-secondary: var(--faint);
+  --el-text-color-placeholder: var(--faint);
+  --el-border-color: var(--border);
+  --el-border-color-light: var(--border);
+  --el-border-color-lighter: var(--surface-2);
+  --el-border-color-extra-light: var(--surface-2);
+  --el-fill-color: var(--surface-2);
+  --el-fill-color-light: var(--surface-2);
+  --el-fill-color-lighter: var(--ground);
+  --el-fill-color-blank: var(--surface);
+  --el-border-radius-base: 9px;
+  --el-font-family: var(--sans);
+  --el-box-shadow-light: var(--shadow);
+}
+
+/* —— 深色主题（Element Plus 约定的 html.dark） —— */
+html.dark {
+  --ground: #0e1219;
+  --surface: #161c26;
+  --surface-2: #1d2531;
+  --ink: #e8ecf5;
+  --muted: #9aa7bf;
+  --faint: #6f7d95;
+  --border: #28303d;
+  --border-strong: #39434f;
+  --accent: #7c81f2;
+  --accent-ink: #9a9ef5;
+  --accent-soft: #232445;
+  --good: #3ec98c;
+  --good-soft: #123324;
+  --bad: #f07171;
+  --bad-soft: #3a1c1c;
+  --swap: #f4b445;
+  --swap-soft: #38300f;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 18px 40px -20px rgba(0, 0, 0, .7);
+
+  --el-color-primary-light-3: #6a6fd0;
+  --el-color-primary-light-5: #4c5296;
+  --el-color-primary-light-7: #363c66;
+  --el-color-primary-light-8: #2b3050;
+  --el-color-primary-light-9: var(--accent-soft);
+  --el-color-primary-dark-2: #9a9ef5;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #app { height: 100%; margin: 0; padding: 0; }
+
+body {
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* —— 通用排版工具类 —— */
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 500;
+}
+.display {
+  font-family: var(--display);
+  font-weight: 700;
+  letter-spacing: -.01em;
+}
+.mono { font-family: var(--mono); }
+
+/* —— 卡片统一质感 —— */
+.el-card {
+  border-radius: 14px !important;
+  border-color: var(--border) !important;
+  box-shadow: var(--shadow) !important;
+}
+.el-card__header { border-bottom-color: var(--border) !important; }
+
+/* —— 表格里数据用等宽字体，更易辨认 token/uuid —— */
+.data-cell { font-family: var(--mono); font-size: 12.5px; word-break: break-all; }
+
+/* —— 表头改成大写、字距、弱化色，呼应参考稿 —— */
+.el-table th.el-table__cell {
+  background: var(--surface-2) !important;
+}
+.el-table th.el-table__cell .cell {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
