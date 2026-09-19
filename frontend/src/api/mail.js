@@ -1,6 +1,6 @@
 import request from './request'
 
-// 取件比普通请求慢（换 token + IMAP 连接），单独放宽超时
+// 取件比普通请求慢（换 token + IMAP 逐封拉正文），单独放宽超时；须 ≥ 后端 gmail-reader 读超时
 export function fetchMail(data) {
-  return request.post('/mail/fetch', data, { timeout: 30000 })
+  return request.post('/mail/fetch', data, { timeout: 60000 })
 }

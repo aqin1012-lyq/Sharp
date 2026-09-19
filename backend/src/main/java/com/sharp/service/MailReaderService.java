@@ -18,17 +18,15 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
- * 邮件取件（复刻 2fa.run/mail）：
+ * Outlook 邮件取件（复刻 2fa.run/mail）：
  * refreshToken + clientId → 微软 OAuth2 换 access_token → Microsoft Graph 读取 Outlook 最新邮件，
  * 并从主题/正文中提取验证码。只读，不改动/删除邮件。
  *
  * 为何用 Graph 而非 IMAP：自 2024-12 起微软对个人账号(outlook.com/hotmail/live)的 IMAP OAuth2
  * 存在服务端回归——token 认证成功但 IMAP 会话被拒（NO User is authenticated but not connected）。
- * Graph REST 接口不受影响，个人账号可正常拉信。
+ * Graph REST 接口不受影响，个人账号可正常拉信。（Gmail 见 GmailReaderService，其 IMAP 正常可用。）
  */
 @Service
 public class MailReaderService {
@@ -48,13 +46,6 @@ public class MailReaderService {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    /** 提取验证码：优先取关键词附近的 4-8 位数字，兜底取正文第一个独立 4-8 位数字。 */
-    private static final Pattern CODE_NEAR_KEYWORD = Pattern.compile(
-            "(?:code|verification|verify|passcode|otp|one[-\\s]?time|安全代码|验证码|校验码|动态密码)"
-                    + "[^0-9]{0,20}?(\\d{4,8})",
-            Pattern.CASE_INSENSITIVE);
-    private static final Pattern CODE_FALLBACK = Pattern.compile("(?<!\\d)(\\d{4,8})(?!\\d)");
-
     private static final DateTimeFormatter ISO = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
 
     /**
@@ -70,15 +61,15 @@ public class MailReaderService {
         }
         boolean scopeDenied = first.error() != null
                 && (first.error().contains("AADSTS70000") || first.error().contains("AADSTS65001"));
-        if (scopeDenied && !isBlank(scopeFallback)) {
+        if (scopeDenied && !MailTextUtil.isBlank(scopeFallback)) {
             TokenResponse retry = requestToken(clientId, refreshToken, scopeFallback);
             if (retry.accessToken() != null) {
                 return retry.accessToken();
             }
-            throw new IllegalArgumentException("获取 access_token 失败：" + trim(first.error(), 260)
-                    + "；改用 .default 重试仍失败：" + trim(retry.error(), 260));
+            throw new IllegalArgumentException("获取 access_token 失败：" + MailTextUtil.trim(first.error(), 260)
+                    + "；改用 .default 重试仍失败：" + MailTextUtil.trim(retry.error(), 260));
         }
-        throw new IllegalArgumentException("获取 access_token 失败：" + trim(first.error(), 500));
+        throw new IllegalArgumentException("获取 access_token 失败：" + MailTextUtil.trim(first.error(), 500));
     }
 
     /** 单次 token 请求；scope 为空则不带该参数。成功返回 access_token，失败返回错误原文。 */
@@ -86,7 +77,7 @@ public class MailReaderService {
         String form = "client_id=" + enc(clientId)
                 + "&grant_type=refresh_token"
                 + "&refresh_token=" + enc(refreshToken)
-                + (isBlank(scopeValue) ? "" : "&scope=" + enc(scopeValue));
+                + (MailTextUtil.isBlank(scopeValue) ? "" : "&scope=" + enc(scopeValue));
         try {
             HttpClient client = HttpClient.newBuilder()
                     .connectTimeout(Duration.ofMillis(connectTimeoutMs))
@@ -164,8 +155,8 @@ public class MailReaderService {
             String msg = json.path("error").path("message").asText("");
             String code = json.path("error").path("code").asText("");
             throw new IllegalArgumentException("Graph 返回 " + resp.statusCode()
-                    + (isBlank(code) ? "" : "（" + code + "）")
-                    + "：" + (isBlank(msg) ? trim(resp.body(), 300) : trim(msg, 300)));
+                    + (MailTextUtil.isBlank(code) ? "" : "（" + code + "）")
+                    + "：" + (MailTextUtil.isBlank(msg) ? MailTextUtil.trim(resp.body(), 300) : MailTextUtil.trim(msg, 300)));
         }
         JsonNode value = json.path("value");
         if (value.isArray()) {
@@ -199,59 +190,14 @@ public class MailReaderService {
         JsonNode bodyNode = m.path("body");
         String contentType = bodyNode.path("contentType").asText("text");
         String content = bodyNode.path("content").asText("");
-        String body = "html".equalsIgnoreCase(contentType) ? htmlToText(content) : content;
-        if (isBlank(body)) {
+        String body = "html".equalsIgnoreCase(contentType) ? MailTextUtil.htmlToText(content) : content;
+        if (MailTextUtil.isBlank(body)) {
             body = m.path("bodyPreview").asText("");
         }
         dto.setBody(body);
-        dto.setPreview(trim(body.replaceAll("\\s+", " ").trim(), 200));
-        dto.setVerifyCode(extractCode(dto.getSubject(), body));
+        dto.setPreview(MailTextUtil.trim(body.replaceAll("\\s+", " ").trim(), 200));
+        dto.setVerifyCode(MailTextUtil.extractCode(dto.getSubject(), body));
         return dto;
-    }
-
-    /** 极简 HTML → 纯文本：去脚本样式、块级标签换行、剥标签、反转义常见实体。 */
-    private String htmlToText(String html) {
-        if (html == null) {
-            return "";
-        }
-        String s = html
-                .replaceAll("(?is)<(script|style)[^>]*>.*?</\\1>", " ")
-                .replaceAll("(?i)<br\\s*/?>", "\n")
-                .replaceAll("(?i)</(p|div|tr|li|h[1-6]|table)>", "\n")
-                .replaceAll("<[^>]+>", " ");
-        s = s.replace("&nbsp;", " ")
-                .replace("&amp;", "&")
-                .replace("&lt;", "<")
-                .replace("&gt;", ">")
-                .replace("&quot;", "\"")
-                .replace("&#39;", "'")
-                .replace("&apos;", "'");
-        // 折叠多余空白但保留换行结构
-        s = s.replaceAll("[ \\t\\x0B\\f\\r]+", " ")
-                .replaceAll(" *\\n *", "\n")
-                .replaceAll("\\n{3,}", "\n\n");
-        return s.trim();
-    }
-
-    /** 从主题+正文提取验证码。 */
-    public String extractCode(String subject, String body) {
-        String text = ((subject == null ? "" : subject) + "\n" + (body == null ? "" : body));
-        Matcher m = CODE_NEAR_KEYWORD.matcher(text);
-        if (m.find()) {
-            return m.group(1);
-        }
-        // 主题里若单独出现验证码数字，优先于正文
-        if (subject != null) {
-            Matcher sm = CODE_FALLBACK.matcher(subject);
-            if (sm.find()) {
-                return sm.group(1);
-            }
-        }
-        Matcher fm = CODE_FALLBACK.matcher(text);
-        if (fm.find()) {
-            return fm.group(1);
-        }
-        return null;
     }
 
     private static String enc(String s) {
@@ -260,13 +206,6 @@ public class MailReaderService {
 
     private static String textOrNull(JsonNode node) {
         return node == null || node.isMissingNode() || node.isNull() ? null : node.asText();
-    }
-
-    private static String trim(String s, int max) {
-        if (s == null) {
-            return "";
-        }
-        return s.length() <= max ? s : s.substring(0, max) + "…";
     }
 
     /**
@@ -289,10 +228,10 @@ public class MailReaderService {
                     claims.path("email").asText(""),
                     claims.path("preferred_username").asText(""),
                     claims.path("unique_name").asText(""));
-            String mismatch = (!isBlank(owner) && !isBlank(email) && !owner.equalsIgnoreCase(email.trim()))
-                    ? "（与传入邮箱不一致！）" : "";
+            String mismatch = (!MailTextUtil.isBlank(owner) && !MailTextUtil.isBlank(email)
+                    && !owner.equalsIgnoreCase(email.trim())) ? "（与传入邮箱不一致！）" : "";
             return "aud=" + aud + "，scp=" + scp
-                    + "，token 账号=" + (isBlank(owner) ? "未知" : owner) + mismatch
+                    + "，token 账号=" + (MailTextUtil.isBlank(owner) ? "未知" : owner) + mismatch
                     + "，传入邮箱=" + nullSafe(email);
         } catch (Exception ex) {
             return "token 声明解析失败（" + ex.getClass().getSimpleName() + "）；传入邮箱=" + nullSafe(email);
@@ -301,7 +240,7 @@ public class MailReaderService {
 
     private static String firstNonBlank(String... values) {
         for (String v : values) {
-            if (!isBlank(v)) {
+            if (!MailTextUtil.isBlank(v)) {
                 return v;
             }
         }
@@ -310,9 +249,5 @@ public class MailReaderService {
 
     private static String nullSafe(String s) {
         return s == null ? "" : s;
-    }
-
-    private static boolean isBlank(String s) {
-        return s == null || s.trim().isEmpty();
     }
 }

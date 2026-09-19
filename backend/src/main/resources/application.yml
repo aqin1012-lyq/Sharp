@@ -44,5 +44,23 @@ mail-reader:
   scope-fallback: ${MAIL_SCOPE_FALLBACK:https://graph.microsoft.com/.default offline_access}
   # Graph 接口基址，个人账号亦走全球端点 /v1.0
   graph-base: ${MAIL_GRAPH_BASE:https://graph.microsoft.com/v1.0}
+  # 默认公共 clientId：当传入/库存的 clientId 不是合法 GUID（缺失或误存了说明文字）时回退到它。
+  # 9e5f94bc-... 是这类 2fa Outlook 账号通用的公共 client。
+  default-client-id: ${MAIL_DEFAULT_CLIENT_ID:9e5f94bc-e8a4-4e73-b8be-63364c29d753}
   connect-timeout-ms: ${MAIL_CONNECT_TIMEOUT:12000}
   read-timeout-ms: ${MAIL_READ_TIMEOUT:20000}
+
+# Gmail 取件：两种认证都走 imap.gmail.com（Gmail 的 IMAP OAuth 正常可用，无 Outlook 那种回归）。
+# 1) OAuth：refreshToken+clientId+clientSecret 经 Google 换 access_token → IMAP(XOAUTH2)
+# 2) 应用专用密码：邮箱 + 16 位 app password → IMAP LOGIN
+gmail-reader:
+  token-url: ${GMAIL_TOKEN_URL:https://oauth2.googleapis.com/token}
+  # OAuth 模式所需 scope；应用专用密码模式用不到
+  scope: ${GMAIL_SCOPE:https://mail.google.com/}
+  imap-host: ${GMAIL_IMAP_HOST:imap.gmail.com}
+  imap-port: ${GMAIL_IMAP_PORT:993}
+  # Gmail 垃圾箱为特殊文件夹；英文界面为 [Gmail]/Spam，本地化环境可用环境变量覆盖
+  spam-folder: ${GMAIL_SPAM_FOLDER:[Gmail]/Spam}
+  connect-timeout-ms: ${GMAIL_CONNECT_TIMEOUT:15000}
+  # 读信要逐封拉正文，高延迟网络下放宽读超时（前端 fetchMail 超时须 ≥ 此值）
+  read-timeout-ms: ${GMAIL_READ_TIMEOUT:45000}

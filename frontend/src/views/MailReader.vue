@@ -5,8 +5,8 @@
       <span class="eyebrow">Mailbox</span>
       <h1 class="display">邮件取件</h1>
       <p class="lede">
-        用 Outlook 的 refreshToken + clientId 通过微软 OAuth2 实时拉取收件箱 / 垃圾箱的最新邮件，并自动提取验证码。
-        凭据可粘贴原始串、从已入库账号选择，或手动填写。
+        实时拉取 Outlook / Gmail 收件箱与垃圾箱的最新邮件并自动提取验证码。
+        Outlook 走微软 Graph；Gmail 走 IMAP（OAuth 或应用专用密码）。凭据可粘贴原始串、从已入库账号选择，或手动填写。
       </p>
     </div>
 
@@ -22,6 +22,20 @@
       </template>
 
       <el-form label-width="90px" class="entry-form">
+        <el-form-item label="服务商">
+          <el-radio-group v-model="provider" class="type-chips" @change="onProviderChange">
+            <el-radio-button value="outlook">Outlook</el-radio-button>
+            <el-radio-button value="gmail">Gmail</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+
+        <el-form-item v-if="provider === 'gmail'" label="认证方式">
+          <el-radio-group v-model="gmailAuth" class="type-chips">
+            <el-radio-button value="oauth">OAuth</el-radio-button>
+            <el-radio-button value="password">应用专用密码</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+
         <el-form-item label="来源">
           <el-radio-group v-model="source" class="type-chips">
             <el-radio-button value="paste">粘贴原始串</el-radio-button>
@@ -40,16 +54,17 @@
                 :rows="3"
                 resize="vertical"
                 class="raw-input"
-                placeholder="邮箱----密码----refreshToken----clientId----说明----cookie----值"
+                :placeholder="schema.placeholder"
               />
               <div class="schema-hint">
-                按 “----” 拆分：第 1 段为<b>邮箱</b>、第 3 段为 <b>refreshToken</b>、第 4 段为 <b>clientId</b>（与邮箱管理里 Outlook 模板一致）。
+                <span v-html="schema.hint"></span>
                 <el-button text size="small" @click="loadPasteExample">载入示例</el-button>
               </div>
               <div v-if="rawStr.trim()" class="parse-echo">
                 <span class="echo-item"><i>邮箱</i>{{ parsed.email || '—' }}</span>
-                <span class="echo-item"><i>refreshToken</i>{{ mask(parsed.refreshToken) }}</span>
-                <span class="echo-item"><i>clientId</i>{{ parsed.clientId || '—' }}</span>
+                <span v-for="k in credKeys" :key="k" class="echo-item">
+                  <i>{{ credLabel[k] }}</i>{{ secretKeys.includes(k) ? mask(parsed[k]) : (parsed[k] || '—') }}
+                </span>
               </div>
             </div>
           </el-form-item>
@@ -64,7 +79,7 @@
               remote
               clearable
               reserve-keyword
-              placeholder="按邮箱 / 备用邮箱 / UUID 搜索已入库的 Outlook 账号"
+              :placeholder="`按邮箱 / 备用邮箱 / UUID 搜索已入库的 ${providerLabel} 账号`"
               :remote-method="searchAccounts"
               :loading="accLoading"
               style="width: 100%; max-width: 460px"
@@ -81,22 +96,23 @@
           <el-form-item v-if="accountId" label="已选">
             <span class="parse-echo">
               <span class="echo-item"><i>邮箱</i>{{ parsed.email || '—' }}</span>
-              <span class="echo-item"><i>refreshToken</i>{{ mask(parsed.refreshToken) }}</span>
-              <span class="echo-item"><i>clientId</i>{{ parsed.clientId || '—' }}</span>
+              <span v-for="k in credKeys" :key="k" class="echo-item">
+                <i>{{ credLabel[k] }}</i>{{ secretKeys.includes(k) ? mask(parsed[k]) : (parsed[k] || '—') }}
+              </span>
             </span>
+          </el-form-item>
+          <el-form-item v-if="accountId && provider === 'gmail' && gmailAuth === 'oauth' && !parsed.clientSecret" label="clientSecret">
+            <el-input v-model="manual.clientSecret" placeholder="库中未存 clientSecret，请在此补充" style="max-width: 460px" />
           </el-form-item>
         </template>
 
         <!-- 手动填写 -->
         <template v-else>
           <el-form-item label="邮箱">
-            <el-input v-model="manual.email" placeholder="xxx@outlook.com" style="max-width: 460px" />
+            <el-input v-model="manual.email" :placeholder="provider === 'gmail' ? 'xxx@gmail.com' : 'xxx@outlook.com'" style="max-width: 460px" />
           </el-form-item>
-          <el-form-item label="refreshToken">
-            <el-input v-model="manual.refreshToken" placeholder="M.C5..." style="max-width: 460px" />
-          </el-form-item>
-          <el-form-item label="clientId">
-            <el-input v-model="manual.clientId" placeholder="9e5f94bc-..." style="max-width: 460px" />
+          <el-form-item v-for="k in credKeys" :key="k" :label="credLabel[k]">
+            <el-input v-model="manual[k]" :placeholder="credPlaceholder[k]" style="max-width: 460px" />
           </el-form-item>
         </template>
 
@@ -118,6 +134,7 @@
           {{ loading ? '取件中…' : '取件' }}
         </el-button>
         <el-button :disabled="loading" @click="clearAll">清空</el-button>
+        <span v-if="disabledReason" class="disabled-reason">{{ disabledReason }}</span>
         <span class="spacer"></span>
         <span v-if="fetchedAt" class="fetched-at">上次取件：{{ fetchedAt }}</span>
       </div>
@@ -180,18 +197,20 @@
         </div>
       </div>
       <div v-else class="empty-state">
-        {{ loading ? '正在从 Outlook 拉取最新邮件…' : '填好凭据后点「取件」，最新邮件会显示在这里；含验证码的邮件会自动高亮。' }}
+        {{ loading ? `正在从 ${providerLabel} 拉取最新邮件…` : '填好凭据后点「取件」，最新邮件会显示在这里；含验证码的邮件会自动高亮。' }}
       </div>
     </el-card>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { fetchMail } from '../api/mail'
 import { listEmail } from '../api/email'
 
+const provider = ref('outlook')        // outlook | gmail
+const gmailAuth = ref('oauth')         // oauth | password（仅 gmail）
 const source = ref('account')
 const folder = ref('all')
 const limit = ref(10)
@@ -200,19 +219,60 @@ const messages = ref([])
 const expanded = reactive({})
 const fetchedAt = ref('')
 
-/* —— 粘贴原始串 —— */
+const providerLabel = computed(() => (provider.value === 'gmail' ? 'Gmail' : 'Outlook'))
+
+/* —— 各服务商/认证方式需要的凭据字段 —— */
+const credLabel = { refreshToken: 'refreshToken', clientId: 'clientId', clientSecret: 'clientSecret', password: '应用专用密码' }
+const credPlaceholder = computed(() => ({
+  refreshToken: provider.value === 'gmail' ? '1//0g...' : 'M.C5...',
+  clientId: '9e5f94bc-...',
+  clientSecret: 'GOCSPX-...',
+  password: '16 位应用专用密码（非登录密码）'
+}))
+const secretKeys = ['refreshToken', 'clientSecret', 'password']
+const credKeys = computed(() => {
+  if (provider.value === 'outlook') return ['refreshToken', 'clientId']
+  if (gmailAuth.value === 'password') return ['password']
+  return ['refreshToken', 'clientId', 'clientSecret']
+})
+
+/* —— 粘贴原始串：不同服务商/方式的拆分模板 —— */
+const PASTE_SCHEMAS = {
+  outlook: {
+    placeholder: '邮箱----密码----refreshToken----clientId----说明----cookie----值',
+    hint: '按 “----” 拆分：第 1 段为<b>邮箱</b>、第 3 段为 <b>refreshToken</b>、第 4 段为 <b>clientId</b>（与邮箱管理里 Outlook 模板一致）。',
+    map: (s) => ({ email: s[0], refreshToken: s[2], clientId: s[3] }),
+    example: [
+      'TimothyFuller1177@outlook.com', 'levdsh925786',
+      'M.C525_SN1.0.U.MsaArtifacts-ChhjhmrdVl8aj7fSiHaDYME',
+      '9e5f94bc-e8a4-4e73-b8be-63364c29d753',
+      '请复制前面所有数据到 2fa.run/mail 粘贴', 'cookie', 'sk-ant-sid02-abc123'
+    ]
+  },
+  'gmail-oauth': {
+    placeholder: '邮箱----clientId----clientSecret----refreshToken',
+    hint: '按 “----” 拆分：第 1 段为<b>邮箱</b>、第 2 段为 <b>clientId</b>、第 3 段为 <b>clientSecret</b>、第 4 段为 <b>refreshToken</b>。',
+    map: (s) => ({ email: s[0], clientId: s[1], clientSecret: s[2], refreshToken: s[3] }),
+    example: [
+      'someone@gmail.com',
+      '1234567890-abcdefg.apps.googleusercontent.com',
+      'GOCSPX-xxxxxxxxxxxxxxxxxxxx',
+      '1//0gABCDEF-refresh-token-example'
+    ]
+  },
+  'gmail-password': {
+    placeholder: '邮箱----应用专用密码',
+    hint: '按 “----” 拆分：第 1 段为<b>邮箱</b>、第 2 段为 <b>应用专用密码</b>（16 位，非登录密码）。',
+    map: (s) => ({ email: s[0], password: s[1] }),
+    example: ['someone@gmail.com', 'abcd efgh ijkl mnop']
+  }
+}
+const schemaKey = computed(() => (provider.value === 'outlook' ? 'outlook' : `gmail-${gmailAuth.value}`))
+const schema = computed(() => PASTE_SCHEMAS[schemaKey.value])
+
 const rawStr = ref('')
-const PASTE_EXAMPLE = [
-  'TimothyFuller1177@outlook.com',
-  'levdsh925786',
-  'M.C525_SN1.0.U.MsaArtifacts-ChhjhmrdVl8aj7fSiHaDYME',
-  '9e5f94bc-e8a4-4e73-b8be-63364c29d753',
-  '请复制前面所有数据到 2fa.run/mail 粘贴',
-  'cookie',
-  'sk-ant-sid02-abc123'
-].join('----')
 function loadPasteExample() {
-  rawStr.value = PASTE_EXAMPLE
+  rawStr.value = schema.value.example.join('----')
 }
 
 /* —— 从已存账号 —— */
@@ -224,7 +284,7 @@ const selectedAccount = ref(null)
 async function searchAccounts(keyword) {
   accLoading.value = true
   try {
-    const res = await listEmail({ emailType: 'outlook', keyword: keyword || undefined, page: 1, size: 20 })
+    const res = await listEmail({ emailType: provider.value, keyword: keyword || undefined, page: 1, size: 20 })
     accountOptions.value = res.data.records || []
   } catch {
     accountOptions.value = []
@@ -236,34 +296,101 @@ function onAccountChange(id) {
   selectedAccount.value = accountOptions.value.find((a) => a.id === id) || null
 }
 
-/* —— 手动填写 —— */
-const manual = reactive({ email: '', refreshToken: '', clientId: '' })
+/* —— 手动填写（含所有可能字段） —— */
+const manual = reactive({ email: '', refreshToken: '', clientId: '', clientSecret: '', password: '' })
+
+/* 切换服务商时重置账号选择与列表，避免跨服务商串号 */
+function onProviderChange() {
+  accountId.value = null
+  selectedAccount.value = null
+  accountOptions.value = []
+}
+watch([provider, gmailAuth], () => { accountId.value = null; selectedAccount.value = null })
+
+/* —— 粘贴串按内容特征识别字段（不依赖字段顺序，容忍夹带说明段） —— */
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+// 这批 2fa Outlook 账号通用的公共 clientId；串里没带 GUID 时回退到它（与后端默认一致）
+const DEFAULT_OUTLOOK_CLIENT_ID = '9e5f94bc-e8a4-4e73-b8be-63364c29d753'
+function detectFromSegments(segs) {
+  const findBy = (fn) => segs.find(fn) || ''
+  const email = findBy((s) => EMAIL_RE.test(s))
+  if (provider.value === 'outlook') {
+    return {
+      email,
+      clientId: findBy((s) => GUID_RE.test(s)) || DEFAULT_OUTLOOK_CLIENT_ID,   // 无 GUID 则用默认公共 client
+      refreshToken: findBy((s) => /^M\.[A-Za-z0-9._-]{20,}$/.test(s))         // Outlook refreshToken 以 M. 开头
+    }
+  }
+  if (gmailAuth.value === 'oauth') {
+    return {
+      email,
+      clientId: findBy((s) => /\.apps\.googleusercontent\.com$/i.test(s)),  // Google clientId
+      clientSecret: findBy((s) => /^GOCSPX-/.test(s)),                       // Google clientSecret
+      refreshToken: findBy((s) => /^1\/\//.test(s))                         // Google refreshToken 以 1// 开头
+    }
+  }
+  // gmail 应用专用密码：邮箱之外、去空格后 ≥12 位的段视为 app password
+  return {
+    email,
+    password: findBy((s) => s !== email && s.replace(/\s/g, '').length >= 12)
+  }
+}
 
 /* —— 归一化出当前凭据 —— */
 const parsed = computed(() => {
+  let base = {}
   if (source.value === 'paste') {
-    const segs = rawStr.value.trim().split(/-{3,}/)
-    return {
-      email: (segs[0] || '').trim(),
-      refreshToken: (segs[2] || '').trim(),
-      clientId: (segs[3] || '').trim()
-    }
-  }
-  if (source.value === 'account') {
+    const segs = rawStr.value.trim().split(/-{3,}/).map((x) => x.trim()).filter(Boolean)
+    const positional = schema.value.map(segs)     // 按模板位置
+    const detected = detectFromSegments(segs)     // 按内容特征
+    // 特征识别优先，缺失再退回位置解析
+    base = { ...positional }
+    for (const k of Object.keys(detected)) if (detected[k]) base[k] = detected[k]
+  } else if (source.value === 'account') {
     const a = selectedAccount.value
-    return {
-      email: a?.email || '',
-      refreshToken: a?.refreshToken || '',
-      clientId: a?.clientId || ''
+    base = {
+      email: a?.email,
+      refreshToken: a?.refreshToken,
+      clientId: a?.clientId,
+      clientSecret: manual.clientSecret,   // 库中暂无该列，从补充框取
+      password: a?.password
     }
+  } else {
+    base = { ...manual }
   }
-  return { email: manual.email.trim(), refreshToken: manual.refreshToken.trim(), clientId: manual.clientId.trim() }
+  const out = { email: (base.email || '').trim() }
+  for (const k of credKeys.value) out[k] = (base[k] || '').trim()
+  return out
 })
 
 const canFetch = computed(() => {
-  if (source.value === 'account') return !!accountId.value
+  if (source.value === 'account') {
+    if (!accountId.value) return false
+    // gmail oauth 需要 clientSecret（库中无则用补充框）
+    if (provider.value === 'gmail' && gmailAuth.value === 'oauth') return !!parsed.value.clientSecret
+    return true
+  }
   const p = parsed.value
-  return !!(p.email && p.refreshToken && p.clientId)
+  if (!p.email) return false
+  return credKeys.value.every((k) => !!p[k])
+})
+
+/* 取件按钮为何不可点 —— 让缺失项对用户可见 */
+const disabledReason = computed(() => {
+  if (canFetch.value) return ''
+  if (source.value === 'account') {
+    if (!accountId.value) return '请先选择账号'
+    if (provider.value === 'gmail' && gmailAuth.value === 'oauth' && !parsed.value.clientSecret) {
+      return '该账号未存 clientSecret，请在上方补充'
+    }
+    return ''
+  }
+  const p = parsed.value
+  const missing = []
+  if (!p.email) missing.push('邮箱')
+  for (const k of credKeys.value) if (!p[k]) missing.push(credLabel[k])
+  return missing.length ? `请填写：${missing.join('、')}` : ''
 })
 
 const latestCode = computed(() => messages.value.find((m) => m.verifyCode)?.verifyCode || '')
@@ -283,9 +410,12 @@ async function handleFetch() {
   messages.value = []
   for (const k of Object.keys(expanded)) delete expanded[k]
   try {
-    const payload = { folder: folder.value, limit: limit.value }
+    const payload = { provider: provider.value, folder: folder.value, limit: limit.value }
+    if (provider.value === 'gmail') payload.authMode = gmailAuth.value
     if (source.value === 'account') {
       payload.accountId = accountId.value
+      // 账号缺 clientSecret 时用补充框
+      if (provider.value === 'gmail' && gmailAuth.value === 'oauth') payload.clientSecret = parsed.value.clientSecret
     } else {
       Object.assign(payload, parsed.value)
     }
@@ -298,7 +428,7 @@ async function handleFetch() {
     }
     fetchedAt.value = new Date().toLocaleTimeString()
   } catch {
-    // 错误信息已由 request 拦截器统一 ElMessage 提示（含微软返回原文）
+    // 错误信息已由 request 拦截器统一 ElMessage 提示（含服务端返回原文）
   } finally {
     loading.value = false
   }
@@ -315,6 +445,8 @@ function clearAll() {
   manual.email = ''
   manual.refreshToken = ''
   manual.clientId = ''
+  manual.clientSecret = ''
+  manual.password = ''
   messages.value = []
   fetchedAt.value = ''
 }
@@ -429,6 +561,10 @@ async function copyText(text, msg) {
   margin-top: 8px;
 }
 .toolbar .spacer { flex: 1 1 auto; }
+.disabled-reason {
+  font-size: 12px;
+  color: var(--warn, #b8860b);
+}
 .fetched-at {
   font-family: var(--mono);
   font-size: 11.5px;
