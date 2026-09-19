@@ -10,7 +10,9 @@ import org.springframework.data.domain.Pageable;
 public interface EmailAccountRepository extends JpaRepository<EmailAccount, Long> {
 
     @Query("SELECT e FROM EmailAccount e WHERE " +
-            "(:emailType IS NULL OR :emailType = '' OR e.emailType = :emailType) AND " +
+            "(:emailType IS NULL OR :emailType = '' " +
+            " OR (:emailType = 'other' AND e.emailType NOT IN ('gmail', '012e', 'outlook')) " +
+            " OR (:emailType <> 'other' AND e.emailType = :emailType)) AND " +
             "(:keyword IS NULL OR :keyword = '' OR e.email LIKE %:keyword% OR e.recoveryEmail LIKE %:keyword% OR e.uuid LIKE %:keyword%) " +
             "ORDER BY e.id DESC")
     Page<EmailAccount> search(@Param("emailType") String emailType,

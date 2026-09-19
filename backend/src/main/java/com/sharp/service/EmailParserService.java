@@ -38,6 +38,8 @@ public class EmailParserService {
     public static final String TYPE_OUTLOOK = "outlook";
     /** 混合批量：每行按内容自动识别类型 */
     public static final String TYPE_AUTO = "auto";
+    /** 邮箱后缀认不出时的兜底类型 */
+    public static final String TYPE_OTHER = "other";
 
     /** 字段名 -> 赋值方法。字段顺序覆盖时用它把第 i 段写进对应字段；表中没有的名字（如占位符 "ignore"）直接跳过。 */
     private static final Map<String, BiConsumer<EmailAccount, String>> SETTERS = Map.ofEntries(
@@ -94,7 +96,11 @@ public class EmailParserService {
         }
         String type = emailType.trim().toLowerCase();
         if (TYPE_AUTO.equals(type)) {
-            // 混合批量：按本行内容识别类型，走该类型默认规则（fields 不适用，因每行结构可能不同）
+            // 自动识别：传了字段顺序则按该顺序逐位映射（类型由邮箱后缀判定，不限三种）；
+            // 未传则按本行内容识别为三种之一，走其默认结构。
+            if (fields != null && !fields.isEmpty()) {
+                return parseAutoByFields(raw, fields);
+            }
             type = detectType(raw);
         } else if (fields != null && !fields.isEmpty()) {
             return parseByFields(type, raw, fields);
@@ -165,6 +171,72 @@ public class EmailParserService {
             }
         }
         return a;
+    }
+
+    /** 各 VARCHAR 列的最大长度（与 schema.sql 一致）；未列出的字段为 TEXT，不限长。 */
+    private static final Map<String, Integer> MAX_LEN = Map.of(
+            "email", 255,
+            "password", 255,
+            "recoveryEmail", 255,
+            "regYear", 16,
+            "country", 64,
+            "extraUrl", 1024,
+            "clientId", 128,
+            "note", 1024,
+            "uuid", 128
+    );
+
+    /**
+     * 自动识别 + 字段顺序：按每行分隔符（含 "|" 用 "|"，否则按 3+ 连字符）切段，逐位映射到 fields，
+     * 类型由邮箱后缀判定（不限三种）。每个值按目标列最大长度截断，避免字段顺序与某行不匹配时
+     * 长值撑爆短列导致整批入库失败（原始整行完整存于 rawData）。
+     */
+    private EmailAccount parseAutoByFields(String raw, List<String> fields) {
+        EmailAccount a = new EmailAccount();
+        a.setRawData(raw);
+        String s = raw == null ? "" : raw;
+        String[] p = s.contains("|") ? s.split("\\|", fields.size()) : s.split("-{3,}", fields.size());
+        for (int i = 0; i < fields.size(); i++) {
+            String field = fields.get(i);
+            BiConsumer<EmailAccount, String> setter = SETTERS.get(field);
+            if (setter != null) {
+                setter.accept(a, clampToColumn(field, get(p, i)));
+            }
+        }
+        a.setEmailType(classifyByEmail(a.getEmail()));
+        return a;
+    }
+
+    /** 按目标列最大长度截断（TEXT 列不限长）。 */
+    private String clampToColumn(String field, String value) {
+        if (value == null) {
+            return null;
+        }
+        Integer max = MAX_LEN.get(field);
+        return (max != null && value.length() > max) ? value.substring(0, max) : value;
+    }
+
+    /**
+     * 按邮箱后缀分类：三种已知域名归为 gmail / 012e / outlook；其余取 "@" 后的域名作为类型；
+     * 无有效邮箱时归为 "other"。结果截断到 email_type 列长（32）。
+     */
+    private String classifyByEmail(String email) {
+        String type = TYPE_OTHER;
+        if (email != null) {
+            int at = email.lastIndexOf('@');
+            if (at >= 0 && at < email.length() - 1) {
+                String domain = email.substring(at + 1).trim().toLowerCase();
+                if (!domain.isEmpty()) {
+                    type = switch (domain) {
+                        case "gmail.com" -> TYPE_GMAIL;
+                        case "012e.com" -> TYPE_012E;
+                        case "outlook.com" -> TYPE_OUTLOOK;
+                        default -> domain;
+                    };
+                }
+            }
+        }
+        return type.length() > 32 ? type.substring(0, 32) : type;
     }
 
     /** 按邮箱类型的分隔符切段，切到底。 */

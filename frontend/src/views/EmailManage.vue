@@ -36,8 +36,8 @@
           </el-radio-group>
         </el-form-item>
 
-        <el-form-item :label="emailType === 'auto' ? '解析方式' : '字段顺序'">
-          <div v-if="emailType !== 'auto'" class="schema-block">
+        <el-form-item label="字段顺序">
+          <div class="schema-block">
             <div class="schema-row">
               <div ref="schemaEl" class="schema">
                 <template v-for="(f, i) in currentFields" :key="f.key">
@@ -71,12 +71,10 @@
             <div class="schema-hint">
               拖拽色块调整顺序（也可聚焦后按 ← / →）；解析时第 N 段写入这里的第 N 个字段，段数不够的字段留空。
               <span v-if="emailType === 'gmail'">gmail 按原始串里有没有 “|” 自动切换两套布局。</span>
+              <span v-if="emailType === 'auto'">自动识别：含数据表全部字段，可自定义顺序；逐行按邮箱后缀归类（不限三种，其余记为该域名），
+              每行含 “|” 按 “|” 否则按 “----” 切段。</span>
               <span v-if="isCustomOrder" class="custom-flag">已自定义</span>
             </div>
-          </div>
-          <div v-else class="schema-hint auto-hint">
-            混合模式：可一次粘贴不同类型的数据，每行按<b>主邮箱域名</b>（@gmail.com / @012e.com / @outlook.com）自动识别类型；
-            域名认不出时按分隔符与段数兜底。各行按对应类型的<b>默认结构</b>解析，此模式下不使用字段顺序覆盖。
           </div>
         </el-form-item>
 
@@ -140,6 +138,11 @@
               </div>
               <el-table :data="previewList" border size="small" style="width: 100%">
                 <el-table-column type="index" label="#" width="46" align="center" />
+                <el-table-column v-if="emailType === 'auto'" label="类型" width="90">
+                  <template #default="{ row }">
+                    <el-tag :type="tagType(row.emailType)" size="small">{{ typeLabel(row.emailType) }}</el-tag>
+                  </template>
+                </el-table-column>
                 <el-table-column
                   v-for="col in previewColumns"
                   :key="col.key"
@@ -379,6 +382,7 @@
               <el-option label="@gmail.com" value="gmail" />
               <el-option label="@012e.com" value="012e" />
               <el-option label="@outlook.com" value="outlook" />
+              <el-option label="其他" value="other" />
             </el-select>
             <el-input
               v-model="query.keyword"
@@ -480,6 +484,7 @@ const fieldDefs = {
       { key: 'country', label: '国家', width: 100 },
       { key: 'authKey', label: '辅助验证码', width: 200 },
       { key: 'extraUrl', label: '链接', width: 200 },
+      { key: 'note', label: '说明', width: 200 },
       ...UUID_TOKEN
     ]
   },
@@ -492,6 +497,7 @@ const fieldDefs = {
       { key: 'recoveryEmail', label: '备用邮箱', width: 200 },
       { key: 'authKey', label: '2FA备用码', width: 200 },
       { key: 'extraUrl', label: '2FA链接', width: 240 },
+      { key: 'note', label: '说明', width: 200 },
       ...UUID_TOKEN
     ]
   },
@@ -502,6 +508,7 @@ const fieldDefs = {
       { key: 'email', label: '邮箱', width: 200 },
       { key: 'password', label: '密码', width: 120 },
       { key: 'extraUrl', label: '取件链接', width: 320 },
+      { key: 'note', label: '说明', width: 200 },
       ...UUID_TOKEN
     ]
   },
@@ -516,6 +523,27 @@ const fieldDefs = {
       { key: 'note', label: '说明', width: 200 },
       { key: 'ignore', label: '固定标记 cookie' },
       { key: 'cookie', label: 'cookie', width: 220 },
+      { key: 'authKey', label: '2FA密钥', width: 200 },
+      ...UUID_TOKEN
+    ]
+  },
+  // 自动识别：含数据表全部字段，用户自定义顺序；按每行分隔符切段，类型按邮箱后缀判定（不限三种）。
+  auto: {
+    sep: '----',
+    sepRe: /(-{3,})/,
+    fields: [
+      { key: 'email', label: '邮箱', width: 200 },
+      { key: 'password', label: '密码', width: 120 },
+      { key: 'recoveryEmail', label: '备用邮箱', width: 200 },
+      { key: 'recoveryKey', label: 'key', width: 180 },
+      { key: 'regYear', label: '年份', width: 80 },
+      { key: 'country', label: '国家', width: 100 },
+      { key: 'authKey', label: '辅助验证码 / 2FA', width: 220 },
+      { key: 'extraUrl', label: '链接', width: 220 },
+      { key: 'refreshToken', label: 'refreshToken', width: 200 },
+      { key: 'clientId', label: 'clientId', width: 180 },
+      { key: 'note', label: '说明', width: 180 },
+      { key: 'cookie', label: 'cookie', width: 200 },
       ...UUID_TOKEN
     ]
   }
@@ -585,11 +613,10 @@ const schemaEl = ref(null)
 const dragIndex = ref(-1)
 const overIndex = ref(-1)
 
-// gmail 两套布局按原始串里有没有 "|" 自动切（与后端 splitSegments 的判定一致）；其余类型模板即类型名
+// 模板选择：auto → 全字段模板；gmail 按有无 "|" 切两套布局；其余即类型名
 const templateKey = computed(() => {
-  // auto（混合）没有固定字段模板，用 gmail 兜底避免下游取 undefined；字段顺序区在 auto 下不渲染
   if (emailType.value === 'auto') {
-    return 'gmail'
+    return 'auto'
   }
   if (emailType.value !== 'gmail') {
     return emailType.value
@@ -597,37 +624,15 @@ const templateKey = computed(() => {
   return rawData.value.includes('|') ? 'gmail' : 'gmail-dash'
 })
 
-// auto 混合模式的预览列：前置"类型"列 + 数据库全部字段（各行字段不一，全展示）
-const AUTO_COLUMNS = [
-  { key: 'emailType', label: '类型', width: 84 },
-  { key: 'email', label: '邮箱', width: 200 },
-  { key: 'password', label: '密码', width: 120 },
-  { key: 'recoveryEmail', label: '备用邮箱', width: 200 },
-  { key: 'recoveryKey', label: 'key', width: 160 },
-  { key: 'regYear', label: '年份', width: 72 },
-  { key: 'country', label: '国家', width: 90 },
-  { key: 'authKey', label: '辅助验证码 / 2FA', width: 220 },
-  { key: 'extraUrl', label: '链接', width: 220 },
-  { key: 'refreshToken', label: 'refreshToken', width: 200 },
-  { key: 'clientId', label: 'clientId', width: 180 },
-  { key: 'note', label: '说明', width: 180 },
-  { key: 'cookie', label: 'cookie', width: 200 },
-  { key: 'uuid', label: 'UUID', width: 200 },
-  { key: 'token', label: 'token', width: 200 }
-]
-
 const currentSep = computed(() => fieldDefs[templateKey.value].sep)
 const currentFields = computed(() => {
   const byKey = new Map(fieldDefs[templateKey.value].fields.map((f) => [f.key, f]))
   return fieldOrder[templateKey.value].map((k) => byKey.get(k))
 })
-// 预览列：auto 用全字段+类型列；其余跟着拖拽后的顺序走（占位段不成列）
-const previewColumns = computed(() =>
-  emailType.value === 'auto' ? AUTO_COLUMNS : currentFields.value.filter((f) => f.key !== 'ignore')
-)
+// 预览列跟着拖拽后的顺序走（占位段不成列）；auto 的"类型"列在表格里单独渲染
+const previewColumns = computed(() => currentFields.value.filter((f) => f.key !== 'ignore'))
 const isCustomOrder = computed(
-  () => emailType.value !== 'auto' &&
-    fieldOrder[templateKey.value].join() !== defaultKeys(templateKey.value).join()
+  () => fieldOrder[templateKey.value].join() !== defaultKeys(templateKey.value).join()
 )
 
 // 布局切换（比如粘进来的 gmail 串从 "----" 换成 "|"）后，旧预览已经对不上
@@ -703,12 +708,12 @@ function resetOrder() {
   previewList.value = []
 }
 
-/** 色块即解析依据：当前顺序总是随请求发给后端。auto 混合模式不传 fields，由后端逐行识别类型。 */
+/** 色块即解析依据：当前顺序总是随请求发给后端。auto 也发送字段顺序，后端按邮箱后缀归类。 */
 function buildPayload() {
   return {
     emailType: emailType.value,
     rawData: keptLines.value.map((c) => c.raw).join('\n'),
-    fields: emailType.value === 'auto' ? undefined : [...fieldOrder[templateKey.value]]
+    fields: [...fieldOrder[templateKey.value]]
   }
 }
 
@@ -725,11 +730,13 @@ const issuesOpen = ref(false)
 /**
  * 按当前模板切段。分隔符用捕获组保留，最后一个字段吞掉剩余原文，
  * 与后端 split(regex, limit) 的语义一致 —— token / cookie 内部含分隔符也不会被截断。
+ * auto 逐行判定：含 "|" 按 "|"，否则按 3+ 连字符。
  */
 function splitByTemplate(line, tpl) {
   const def = fieldDefs[tpl]
+  const sepRe = tpl === 'auto' ? (line.includes('|') ? /(\|)/ : /(-{3,})/) : def.sepRe
   const max = def.fields.length
-  const pieces = line.split(def.sepRe) // [段, 分隔符, 段, 分隔符, ...]
+  const pieces = line.split(sepRe) // [段, 分隔符, 段, 分隔符, ...]
   const segs = []
   for (let i = 0; i < pieces.length; i += 2) {
     if (segs.length === max - 1) {
@@ -742,24 +749,6 @@ function splitByTemplate(line, tpl) {
 }
 
 const lineChecks = computed(() => {
-  // 混合模式：每行只校验主邮箱格式，具体类型交给后端逐行识别
-  if (emailType.value === 'auto') {
-    const rows = []
-    for (const [i, line] of rawData.value.split('\n').entries()) {
-      const raw = line.replace(/\r$/, '').trim()
-      if (raw === '') continue
-      const first = raw.split(/-{3,}|\|/)[0].trim()
-      const ok = EMAIL_RE.test(first)
-      rows.push({
-        lineNo: i + 1,
-        raw,
-        kind: ok ? 'ok' : 'err',
-        reasons: ok ? [] : ['首段不是邮箱格式，无法识别类型'],
-        short: raw.length > 120 ? `${raw.slice(0, 120)}…` : raw
-      })
-    }
-    return rows
-  }
   const tpl = templateKey.value
   const order = fieldOrder[tpl]
   const labelOf = new Map(fieldDefs[tpl].fields.map((f) => [f.key, f.label]))
@@ -1400,7 +1389,8 @@ onMounted(loadList)
   box-shadow: none !important;
   color: var(--ink);
   padding: 14px 15px;
-  white-space: pre;
+  white-space: pre-wrap;
+  word-break: break-all;
   overflow: auto;
   tab-size: 2;
 }
