@@ -18,4 +18,8 @@ public interface EmailAccountRepository extends JpaRepository<EmailAccount, Long
     Page<EmailAccount> search(@Param("emailType") String emailType,
                               @Param("keyword") String keyword,
                               Pageable pageable);
+
+    /** 按录入人分组统计条数，多到少排序；返回 [createdBy, count]。 */
+    @Query("SELECT e.createdBy, COUNT(e) FROM EmailAccount e GROUP BY e.createdBy ORDER BY COUNT(e) DESC")
+    java.util.List<Object[]> countByCreatedBy();
 }

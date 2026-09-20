@@ -24,6 +24,12 @@ const routes = [
         name: 'MailReader',
         component: () => import('../views/MailReader.vue'),
         meta: { title: '邮件取件' }
+      },
+      {
+        path: 'stats',
+        name: 'StatsEntry',
+        component: () => import('../views/StatsEntry.vue'),
+        meta: { title: '录入统计' }
       }
     ]
   }

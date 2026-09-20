@@ -15,3 +15,7 @@ export function listEmail(params) {
 export function deleteEmail(id) {
   return request.delete(`/email/${id}`)
 }
+
+export function statsByUser() {
+  return request.get('/email/stats/by-user')
+}

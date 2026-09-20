@@ -26,12 +26,14 @@ CREATE TABLE IF NOT EXISTS `email_account` (
     `uuid`           VARCHAR(128) DEFAULT NULL COMMENT 'UUID: 原始串里带则解析，否则留空',
     `token`          TEXT         DEFAULT NULL COMMENT 'token: 原始串里带则解析，否则留空',
     `raw_data`       TEXT         DEFAULT NULL COMMENT '原始信息',
+    `created_by`     VARCHAR(64)  DEFAULT NULL COMMENT '录入人(登录账号，nginx X-Auth-User)',
     `create_time`    DATETIME     DEFAULT NULL COMMENT '创建时间',
     `update_time`    DATETIME     DEFAULT NULL COMMENT '更新时间',
     PRIMARY KEY (`id`),
     KEY `idx_email_type` (`email_type`),
     KEY `idx_email` (`email`),
-    KEY `idx_uuid` (`uuid`)
+    KEY `idx_uuid` (`uuid`),
+    KEY `idx_created_by` (`created_by`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='邮箱账号表';
 
 -- ---------- 已有库的增量迁移（下列 ALTER 截至 2026-09-18 均已应用到生产库）----------
@@ -48,3 +50,8 @@ CREATE TABLE IF NOT EXISTS `email_account` (
 -- ALTER TABLE `email_account`
 --     MODIFY COLUMN `auth_key`     TEXT COMMENT '辅助验证码 / 2FA 备用码(gmail)',
 --     MODIFY COLUMN `recovery_key` TEXT COMMENT 'key / 备用邮箱密码(gmail)';
+--
+-- [2026-09-20] 新增 created_by（录入人统计）：
+-- ALTER TABLE `email_account`
+--     ADD COLUMN `created_by` VARCHAR(64) DEFAULT NULL COMMENT '录入人(登录账号)' AFTER `raw_data`,
+--     ADD KEY `idx_created_by` (`created_by`);

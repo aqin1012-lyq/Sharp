@@ -94,6 +94,10 @@ public class EmailAccount {
     @Column(name = "raw_data", columnDefinition = "TEXT")
     private String rawData;
 
+    /** 录入人（取自登录账号，nginx 经 X-Auth-User 传入；历史数据为空） */
+    @Column(name = "created_by", length = 64)
+    private String createdBy;
+
     @CreationTimestamp
     @Column(name = "create_time", updatable = false)
     private LocalDateTime createTime;

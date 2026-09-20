@@ -28,10 +28,19 @@ public class EmailAccountController {
         return Result.ok(service.parse(req.getEmailType(), req.getRawData(), req.getFields()));
     }
 
-    /** 解析并保存 */
+    /** 解析并保存。录入人取自 nginx 透传的登录名 X-Auth-User（无则记为 unknown）。 */
     @PostMapping("/save")
-    public Result<List<EmailAccount>> save(@Valid @RequestBody ParseRequest req) {
-        return Result.ok(service.parseAndSave(req.getEmailType(), req.getRawData(), req.getFields()));
+    public Result<List<EmailAccount>> save(
+            @Valid @RequestBody ParseRequest req,
+            @RequestHeader(value = "X-Auth-User", required = false) String authUser) {
+        String createdBy = (authUser == null || authUser.isBlank()) ? "unknown" : authUser.trim();
+        return Result.ok(service.parseAndSave(req.getEmailType(), req.getRawData(), req.getFields(), createdBy));
+    }
+
+    /** 按录入人统计邮箱录入量。 */
+    @GetMapping("/stats/by-user")
+    public Result<List<Map<String, Object>>> statsByUser() {
+        return Result.ok(service.statsByUser());
     }
 
     /** 分页查询 */

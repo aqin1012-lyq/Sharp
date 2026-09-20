@@ -151,6 +151,7 @@ server {
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Auth-User $remote_user;   # 透传登录名，后端据此记录「录入人」
         proxy_read_timeout 120s;      # 邮件取件较慢，放宽
         proxy_send_timeout 120s;
     }
@@ -213,6 +214,9 @@ scp -r frontend/dist/* root@2.25.157.9:/www/wwwroot/sharp/
 - **自签证书**：浏览器首访提示不受信任属正常，点「继续」即可，传输仍加密。日后若有域名，
   可在宝塔为该 vhost 换正式证书（Let's Encrypt）并可改用 443。
 - **口令管理**：`/etc/sharp/htpasswd` 为共享登录；改密 `htpasswd /etc/sharp/htpasswd admin`，加人同理。
+- **「录入统计」按登录账号归属**：nginx 透传 `X-Auth-User=$remote_user`，后端保存时写入 `created_by`。
+  要区分不同人，需给每人建各自的 htpasswd 账号（`htpasswd /etc/sharp/htpasswd <名字>`）；
+  都用共享 `admin` 时录入量会全记到 admin。历史数据无归属，统计里记为「未知」。
 - **不要动 8080 / 80 / 443**：分别属于 docker 应用 `sub2api` 与其他既有站点。
 - **常用排障**：
   - `systemctl status sharp-backend` / `journalctl -u sharp-backend -n 100`

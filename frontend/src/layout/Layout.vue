@@ -21,6 +21,10 @@
           <el-icon><Promotion /></el-icon>
           <span>邮件取件</span>
         </el-menu-item>
+        <el-menu-item index="/stats">
+          <el-icon><DataAnalysis /></el-icon>
+          <span>录入统计</span>
+        </el-menu-item>
       </el-menu>
     </el-aside>
     <el-container>

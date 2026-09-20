@@ -24,10 +24,26 @@ public class EmailAccountService {
         return parserService.parseMultiline(emailType, rawData, fields);
     }
 
-    /** 解析并保存。fields 为前端拖拽后的字段顺序，可为空。 */
-    public List<EmailAccount> parseAndSave(String emailType, String rawData, List<String> fields) {
+    /** 解析并保存。fields 为前端拖拽后的字段顺序，可为空；createdBy 为录入人（登录账号）。 */
+    public List<EmailAccount> parseAndSave(String emailType, String rawData, List<String> fields, String createdBy) {
         List<EmailAccount> parsed = parserService.parseMultiline(emailType, rawData, fields);
+        if (createdBy != null && !createdBy.isBlank()) {
+            parsed.forEach(a -> a.setCreatedBy(createdBy));
+        }
         return repository.saveAll(parsed);
+    }
+
+    /** 按录入人统计邮箱录入量（createdBy 为空的归为「未知」）。 */
+    public List<java.util.Map<String, Object>> statsByUser() {
+        List<java.util.Map<String, Object>> out = new java.util.ArrayList<>();
+        for (Object[] row : repository.countByCreatedBy()) {
+            java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+            String user = row[0] == null ? null : row[0].toString();
+            m.put("user", (user == null || user.isBlank()) ? "未知" : user);
+            m.put("count", ((Number) row[1]).longValue());
+            out.add(m);
+        }
+        return out;
     }
 
     public Page<EmailAccount> list(String emailType, String keyword, int page, int size) {
