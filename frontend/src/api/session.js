@@ -6,3 +6,6 @@ export function loginApi(data) {
 export function registerApi(data) {
   return request.post('/auth/register', data)
 }
+export function resetPasswordApi(data) {
+  return request.post('/auth/reset-password', data)
+}

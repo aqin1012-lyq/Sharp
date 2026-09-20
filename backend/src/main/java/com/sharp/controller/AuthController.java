@@ -32,6 +32,13 @@ public class AuthController {
         return Result.ok(payload(token, req.getUsername().trim()));
     }
 
+    /** 忘记密码：邀请码 + 用户名 + 新密码，重置后直接登录。 */
+    @PostMapping("/reset-password")
+    public Result<Map<String, String>> resetPassword(@RequestBody AuthRequest req) {
+        String token = authService.resetPassword(req.getUsername(), req.getInviteCode(), req.getPassword());
+        return Result.ok(payload(token, req.getUsername().trim()));
+    }
+
     /** 当前登录用户（需带 token；此接口不在 auth/** 放行范围，走拦截器）。 */
     @GetMapping("/me")
     public Result<Map<String, String>> me() {

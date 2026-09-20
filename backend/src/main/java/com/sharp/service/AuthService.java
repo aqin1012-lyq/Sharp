@@ -60,6 +60,27 @@ public class AuthService {
         return jwtService.generate(u.getUsername());
     }
 
+    /**
+     * 忘记密码：用邀请码重置。校验邀请码 + 用户名存在，写入新密码哈希，返回 JWT（重置后直接登录）。
+     * 无邮件/短信基建，故用团队共享邀请码作为重置凭据。
+     */
+    public String resetPassword(String username, String code, String newPassword) {
+        if (isBlank(username) || isBlank(newPassword)) {
+            throw new IllegalArgumentException("用户名和新密码不能为空");
+        }
+        if (isBlank(inviteCode) || !inviteCode.equals(code == null ? "" : code.trim())) {
+            throw new IllegalArgumentException("邀请码不正确");
+        }
+        if (newPassword.length() < 6) {
+            throw new IllegalArgumentException("新密码至少 6 位");
+        }
+        AppUser u = userRepository.findByUsername(username.trim())
+                .orElseThrow(() -> new IllegalArgumentException("用户不存在"));
+        u.setPasswordHash(encoder.encode(newPassword));
+        userRepository.save(u);
+        return jwtService.generate(u.getUsername());
+    }
+
     private static boolean isBlank(String s) {
         return s == null || s.trim().isEmpty();
     }
