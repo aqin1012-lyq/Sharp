@@ -11,6 +11,7 @@ import lombok.Data;
  * - outlook：refreshToken + clientId + email（Graph 读信）
  * - gmail + authMode=oauth：refreshToken + clientId + clientSecret + email（IMAP XOAUTH2）
  * - gmail + authMode=password：email + password（应用专用密码，IMAP LOGIN）
+ * - 012e：extraUrl（取件链接，GET 即返回最新邮件 HTML）
  */
 @Data
 public class MailFetchRequest {
@@ -18,7 +19,7 @@ public class MailFetchRequest {
     /** 已入库账号 id（传了则优先按此取凭据，并按其 emailType 决定 provider） */
     private Long accountId;
 
-    /** 邮箱服务商：outlook / gmail，默认 outlook（向后兼容） */
+    /** 邮箱服务商：outlook / gmail / 012e，默认 outlook（向后兼容） */
     private String provider;
 
     /** gmail 认证方式：oauth / password，默认 oauth；outlook 忽略 */
@@ -38,6 +39,9 @@ public class MailFetchRequest {
 
     /** 应用专用密码（gmail-password） */
     private String password;
+
+    /** 取件链接（012e） */
+    private String extraUrl;
 
     /** 要读取的文件夹：inbox / junk / all，默认 all */
     private String folder;

@@ -26,6 +26,7 @@
           <el-radio-group v-model="provider" class="type-chips" @change="onProviderChange">
             <el-radio-button value="outlook">Outlook</el-radio-button>
             <el-radio-button value="gmail">Gmail</el-radio-button>
+            <el-radio-button value="012e">012e</el-radio-button>
           </el-radio-group>
         </el-form-item>
 
@@ -108,7 +109,7 @@
 
         <!-- 手动填写 -->
         <template v-else>
-          <el-form-item label="邮箱">
+          <el-form-item v-if="provider !== '012e'" label="邮箱">
             <el-input v-model="manual.email" :placeholder="provider === 'gmail' ? 'xxx@gmail.com' : 'xxx@outlook.com'" style="max-width: 460px" />
           </el-form-item>
           <el-form-item v-for="k in credKeys" :key="k" :label="credLabel[k]">
@@ -116,7 +117,8 @@
           </el-form-item>
         </template>
 
-        <el-form-item label="文件夹">
+        <!-- 012e 无文件夹概念，隐藏文件夹/条数 -->
+        <el-form-item v-if="provider !== '012e'" label="文件夹">
           <el-radio-group v-model="folder" class="type-chips">
             <el-radio-button value="all">全部</el-radio-button>
             <el-radio-button value="inbox">收件箱</el-radio-button>
@@ -209,7 +211,7 @@ import { ElMessage } from 'element-plus'
 import { fetchMail } from '../api/mail'
 import { listEmail } from '../api/email'
 
-const provider = ref('outlook')        // outlook | gmail
+const provider = ref('outlook')        // outlook | gmail | 012e
 const gmailAuth = ref('oauth')         // oauth | password（仅 gmail）
 const source = ref('account')
 const folder = ref('all')
@@ -219,18 +221,20 @@ const messages = ref([])
 const expanded = reactive({})
 const fetchedAt = ref('')
 
-const providerLabel = computed(() => (provider.value === 'gmail' ? 'Gmail' : 'Outlook'))
+const providerLabel = computed(() => ({ gmail: 'Gmail', '012e': '012e' }[provider.value] || 'Outlook'))
 
 /* —— 各服务商/认证方式需要的凭据字段 —— */
-const credLabel = { refreshToken: 'refreshToken', clientId: 'clientId', clientSecret: 'clientSecret', password: '应用专用密码' }
+const credLabel = { refreshToken: 'refreshToken', clientId: 'clientId', clientSecret: 'clientSecret', password: '应用专用密码', extraUrl: '取件链接' }
 const credPlaceholder = computed(() => ({
   refreshToken: provider.value === 'gmail' ? '1//0g...' : 'M.C5...',
   clientId: '9e5f94bc-...',
   clientSecret: 'GOCSPX-...',
-  password: '16 位应用专用密码（非登录密码）'
+  password: '16 位应用专用密码（非登录密码）',
+  extraUrl: 'http://mail.012e.com/api/getcode.php?token=...'
 }))
 const secretKeys = ['refreshToken', 'clientSecret', 'password']
 const credKeys = computed(() => {
+  if (provider.value === '012e') return ['extraUrl']
   if (provider.value === 'outlook') return ['refreshToken', 'clientId']
   if (gmailAuth.value === 'password') return ['password']
   return ['refreshToken', 'clientId', 'clientSecret']
@@ -265,9 +269,19 @@ const PASTE_SCHEMAS = {
     hint: '按 “----” 拆分：第 1 段为<b>邮箱</b>、第 2 段为 <b>应用专用密码</b>（16 位，非登录密码）。',
     map: (s) => ({ email: s[0], password: s[1] }),
     example: ['someone@gmail.com', 'abcd efgh ijkl mnop']
+  },
+  '012e': {
+    placeholder: '取件链接（http://mail.012e.com/api/getcode.php?token=...），或 邮箱----密码----取件链接',
+    hint: '直接粘<b>取件链接</b>即可；也兼容 <b>邮箱----密码----取件链接</b>（自动取其中的链接）。',
+    map: (s) => ({ email: s[0], extraUrl: s.find((x) => /^https?:\/\//i.test(x)) || s[s.length - 1] }),
+    example: ['2w4vsfe430@012e.com', '0m87', 'http://mail.012e.com/api/getcode.php?token=Mnc0djNz']
   }
 }
-const schemaKey = computed(() => (provider.value === 'outlook' ? 'outlook' : `gmail-${gmailAuth.value}`))
+const schemaKey = computed(() => {
+  if (provider.value === 'outlook') return 'outlook'
+  if (provider.value === '012e') return '012e'
+  return `gmail-${gmailAuth.value}`
+})
 const schema = computed(() => PASTE_SCHEMAS[schemaKey.value])
 
 const rawStr = ref('')
@@ -297,7 +311,7 @@ function onAccountChange(id) {
 }
 
 /* —— 手动填写（含所有可能字段） —— */
-const manual = reactive({ email: '', refreshToken: '', clientId: '', clientSecret: '', password: '' })
+const manual = reactive({ email: '', refreshToken: '', clientId: '', clientSecret: '', password: '', extraUrl: '' })
 
 /* 切换服务商时重置账号选择与列表，避免跨服务商串号 */
 function onProviderChange() {
@@ -315,6 +329,9 @@ const DEFAULT_OUTLOOK_CLIENT_ID = '9e5f94bc-e8a4-4e73-b8be-63364c29d753'
 function detectFromSegments(segs) {
   const findBy = (fn) => segs.find(fn) || ''
   const email = findBy((s) => EMAIL_RE.test(s))
+  if (provider.value === '012e') {
+    return { email, extraUrl: findBy((s) => /^https?:\/\//i.test(s)) }
+  }
   if (provider.value === 'outlook') {
     return {
       email,
@@ -354,7 +371,8 @@ const parsed = computed(() => {
       refreshToken: a?.refreshToken,
       clientId: a?.clientId,
       clientSecret: manual.clientSecret,   // 库中暂无该列，从补充框取
-      password: a?.password
+      password: a?.password,
+      extraUrl: a?.extraUrl
     }
   } else {
     base = { ...manual }
@@ -372,7 +390,7 @@ const canFetch = computed(() => {
     return true
   }
   const p = parsed.value
-  if (!p.email) return false
+  if (provider.value !== '012e' && !p.email) return false   // 012e 只需取件链接，无需邮箱
   return credKeys.value.every((k) => !!p[k])
 })
 
@@ -388,7 +406,7 @@ const disabledReason = computed(() => {
   }
   const p = parsed.value
   const missing = []
-  if (!p.email) missing.push('邮箱')
+  if (provider.value !== '012e' && !p.email) missing.push('邮箱')
   for (const k of credKeys.value) if (!p[k]) missing.push(credLabel[k])
   return missing.length ? `请填写：${missing.join('、')}` : ''
 })
@@ -447,6 +465,7 @@ function clearAll() {
   manual.clientId = ''
   manual.clientSecret = ''
   manual.password = ''
+  manual.extraUrl = ''
   messages.value = []
   fetchedAt.value = ''
 }

@@ -6,6 +6,7 @@ import com.sharp.dto.MailMessageDto;
 import com.sharp.entity.EmailAccount;
 import com.sharp.repository.EmailAccountRepository;
 import com.sharp.service.GmailReaderService;
+import com.sharp.service.Mail012eService;
 import com.sharp.service.MailReaderService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -29,6 +30,7 @@ public class MailController {
 
     private final MailReaderService mailReaderService;
     private final GmailReaderService gmailReaderService;
+    private final Mail012eService mail012eService;
     private final EmailAccountRepository accountRepository;
 
     @Value("${mail-reader.default-client-id:}")
@@ -36,9 +38,11 @@ public class MailController {
 
     public MailController(MailReaderService mailReaderService,
                           GmailReaderService gmailReaderService,
+                          Mail012eService mail012eService,
                           EmailAccountRepository accountRepository) {
         this.mailReaderService = mailReaderService;
         this.gmailReaderService = gmailReaderService;
+        this.mail012eService = mail012eService;
         this.accountRepository = accountRepository;
     }
 
@@ -51,9 +55,11 @@ public class MailController {
         int limit = req.getLimit() == null ? 10 : Math.min(Math.max(req.getLimit(), 1), 30);
         String folder = isBlank(req.getFolder()) ? "all" : req.getFolder();
 
-        List<MailMessageDto> messages = "gmail".equals(c.provider)
-                ? fetchGmail(c, folder, limit)
-                : fetchOutlook(c, folder, limit);
+        List<MailMessageDto> messages = switch (c.provider) {
+            case "gmail" -> fetchGmail(c, folder, limit);
+            case "012e" -> mail012eService.fetch(c.extraUrl);
+            default -> fetchOutlook(c, folder, limit);
+        };
         return Result.ok(messages);
     }
 
@@ -102,6 +108,7 @@ public class MailController {
         c.clientId = acc.getClientId();
         c.clientSecret = req.getClientSecret();   // 库中暂无独立列，允许请求补充
         c.password = acc.getPassword();
+        c.extraUrl = acc.getExtraUrl();           // 012e 取件链接
         // 认证方式：请求显式指定优先，否则据库中字段推断（有 refreshToken 走 oauth，否则应用专用密码）
         c.authMode = !isBlank(req.getAuthMode()) ? req.getAuthMode()
                 : (isBlank(acc.getRefreshToken()) ? "password" : "oauth");
@@ -118,12 +125,23 @@ public class MailController {
         c.clientId = req.getClientId();
         c.clientSecret = req.getClientSecret();
         c.password = req.getPassword();
+        c.extraUrl = req.getExtraUrl();
         return c;
     }
 
-    /** emailType/provider 归一：gmail → gmail，其余（含 outlook / 012e / 空）→ outlook。 */
+    /** emailType/provider 归一：gmail→gmail，012e→012e，其余（含 outlook / 空）→ outlook。 */
     private static String normalizeProvider(String raw) {
-        return raw != null && raw.trim().equalsIgnoreCase("gmail") ? "gmail" : "outlook";
+        if (raw == null) {
+            return "outlook";
+        }
+        String t = raw.trim().toLowerCase();
+        if ("gmail".equals(t)) {
+            return "gmail";
+        }
+        if ("012e".equals(t)) {
+            return "012e";
+        }
+        return "outlook";
     }
 
     private static boolean isBlank(String s) {
@@ -139,5 +157,6 @@ public class MailController {
         String clientId;
         String clientSecret;
         String password;
+        String extraUrl;
     }
 }
