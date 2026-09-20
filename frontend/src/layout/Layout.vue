@@ -30,16 +30,23 @@
     <el-container>
       <el-header class="header">
         <span class="title display">{{ currentTitle }}</span>
-        <button
-          class="theme-btn"
-          type="button"
-          aria-label="切换主题"
-          :title="`当前：${modeLabel}（点击循环 跟随系统 / 浅色 / 深色）`"
-          @click="cycleTheme"
-        >
-          <el-icon><component :is="modeIcon" /></el-icon>
-          <span>{{ modeLabel }}</span>
-        </button>
+        <div class="header-right">
+          <span v-if="username" class="whoami"><el-icon><User /></el-icon>{{ username }}</span>
+          <button
+            class="theme-btn"
+            type="button"
+            aria-label="切换主题"
+            :title="`当前：${modeLabel}（点击循环 跟随系统 / 浅色 / 深色）`"
+            @click="cycleTheme"
+          >
+            <el-icon><component :is="modeIcon" /></el-icon>
+            <span>{{ modeLabel }}</span>
+          </button>
+          <button class="theme-btn" type="button" title="退出登录" @click="logout">
+            <el-icon><SwitchButton /></el-icon>
+            <span>退出</span>
+          </button>
+        </div>
       </el-header>
       <el-main class="main">
         <router-view />
@@ -50,12 +57,20 @@
 
 <script setup>
 import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
-import { useRoute } from 'vue-router'
-import { Sunny, Moon, Monitor, Lock } from '@element-plus/icons-vue'
+import { useRoute, useRouter } from 'vue-router'
+import { Sunny, Moon, Monitor, Lock, User, SwitchButton } from '@element-plus/icons-vue'
+import { getUsername, clearAuth } from '../api/auth'
 
 const route = useRoute()
+const router = useRouter()
 const activeMenu = computed(() => route.path)
 const currentTitle = computed(() => route.meta.title || '')
+const username = ref(getUsername())
+
+function logout() {
+  clearAuth()
+  router.replace('/login')
+}
 
 // 三态主题：跟随系统 / 浅色 / 深色，默认跟随系统配色
 const MODES = ['system', 'light', 'dark']
@@ -161,6 +176,11 @@ onBeforeUnmount(() => {
   justify-content: space-between;
 }
 .header .title { font-size: 17px; color: var(--ink); }
+.header-right { display: flex; align-items: center; gap: 10px; }
+.whoami {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; color: var(--muted); font-family: var(--mono);
+}
 .theme-btn {
   display: inline-flex;
   align-items: center;

@@ -36,6 +36,16 @@ CREATE TABLE IF NOT EXISTS `email_account` (
     KEY `idx_created_by` (`created_by`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='邮箱账号表';
 
+-- 应用登录用户表
+CREATE TABLE IF NOT EXISTS `app_user` (
+    `id`            BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `username`      VARCHAR(64)  NOT NULL COMMENT '登录名',
+    `password_hash` VARCHAR(100) NOT NULL COMMENT 'BCrypt 密码哈希',
+    `create_time`   DATETIME     DEFAULT NULL COMMENT '创建时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_username` (`username`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='应用登录用户表';
+
 -- ---------- 已有库的增量迁移（下列 ALTER 截至 2026-09-18 均已应用到生产库）----------
 -- 新库直接看上面的 CREATE TABLE 即为最新完整结构；以下仅供已存在的旧库升级参考。
 -- MySQL 不支持 ADD COLUMN IF NOT EXISTS，已经加过的话重跑会报 Duplicate column name，可忽略。

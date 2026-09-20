@@ -28,12 +28,13 @@ public class EmailAccountController {
         return Result.ok(service.parse(req.getEmailType(), req.getRawData(), req.getFields()));
     }
 
-    /** 解析并保存。录入人取自 nginx 透传的登录名 X-Auth-User（无则记为 unknown）。 */
+    /** 解析并保存。录入人取自登录用户（JWT）。 */
     @PostMapping("/save")
-    public Result<List<EmailAccount>> save(
-            @Valid @RequestBody ParseRequest req,
-            @RequestHeader(value = "X-Auth-User", required = false) String authUser) {
-        String createdBy = (authUser == null || authUser.isBlank()) ? "unknown" : authUser.trim();
+    public Result<List<EmailAccount>> save(@Valid @RequestBody ParseRequest req) {
+        String createdBy = com.sharp.common.CurrentUser.get();
+        if (createdBy == null || createdBy.isBlank()) {
+            createdBy = "unknown";
+        }
         return Result.ok(service.parseAndSave(req.getEmailType(), req.getRawData(), req.getFields(), createdBy));
     }
 

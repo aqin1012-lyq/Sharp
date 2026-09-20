@@ -32,6 +32,13 @@ server:
   servlet:
     context-path: /
 
+# 登录鉴权（JWT）。生产务必用环境变量覆盖 secret 与邀请码。
+auth:
+  jwt:
+    secret: ${AUTH_JWT_SECRET:sharp-dev-secret-change-me-please-0123456789}
+    expire-hours: ${AUTH_JWT_EXPIRE_HOURS:72}
+  invite-code: ${AUTH_INVITE_CODE:sharp-invite}
+
 # 邮件取件（复刻 2fa.run/mail）：Outlook 凭据经 OAuth2 换 access_token 后走 Microsoft Graph 读信。
 # 说明：个人账号(outlook.com/hotmail/live)的 IMAP OAuth2 自 2024-12 起有微软服务端回归，改用 Graph。
 mail-reader:
