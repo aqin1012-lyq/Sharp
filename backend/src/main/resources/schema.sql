@@ -46,6 +46,37 @@ CREATE TABLE IF NOT EXISTS `app_user` (
     UNIQUE KEY `uk_username` (`username`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='应用登录用户表';
 
+-- Apple ID 账号表：一个 Apple ID 下可挂多个隐藏邮箱。只记账号与备注，不存密码 / 2FA。
+CREATE TABLE IF NOT EXISTS `apple_account` (
+    `id`          BIGINT        NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `apple_id`    VARCHAR(255)  NOT NULL COMMENT 'Apple ID 账号',
+    `note`        VARCHAR(1024) DEFAULT NULL COMMENT '备注',
+    `created_by`  VARCHAR(64)   DEFAULT NULL COMMENT '录入人(登录账号)',
+    `create_time` DATETIME      DEFAULT NULL COMMENT '创建时间',
+    `update_time` DATETIME      DEFAULT NULL COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_apple_id` (`apple_id`),
+    KEY `idx_created_by` (`created_by`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Apple ID 账号表';
+
+-- Apple 隐藏邮箱表：隐藏邮箱(xxx@privaterelay.appleid.com) → 同时记录两个转发目标。
+-- 与 apple_account 的关联只建索引不加外键，与 email_account 的处理保持一致。
+CREATE TABLE IF NOT EXISTS `apple_hide_email` (
+    `id`                 BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `apple_account_id`   BIGINT       NOT NULL COMMENT '所属 Apple ID(apple_account.id)',
+    `hide_email`         VARCHAR(255) NOT NULL COMMENT '隐藏邮箱',
+    `redirect_email`     VARCHAR(255) DEFAULT NULL COMMENT 'HackerOne 邮箱',
+    `google_alias_email` VARCHAR(255) DEFAULT NULL COMMENT '谷歌别名邮箱',
+    `created_by`         VARCHAR(64)  DEFAULT NULL COMMENT '录入人(登录账号)',
+    `create_time`        DATETIME     DEFAULT NULL COMMENT '创建时间',
+    `update_time`        DATETIME     DEFAULT NULL COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_hide_email` (`hide_email`),
+    KEY `idx_apple_account_id` (`apple_account_id`),
+    KEY `idx_redirect_email` (`redirect_email`),
+    KEY `idx_google_alias_email` (`google_alias_email`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Apple 隐藏邮箱表';
+
 -- ---------- 已有库的增量迁移（下列 ALTER 截至 2026-09-18 均已应用到生产库）----------
 -- 新库直接看上面的 CREATE TABLE 即为最新完整结构；以下仅供已存在的旧库升级参考。
 -- MySQL 不支持 ADD COLUMN IF NOT EXISTS，已经加过的话重跑会报 Duplicate column name，可忽略。
@@ -65,3 +96,14 @@ CREATE TABLE IF NOT EXISTS `app_user` (
 -- ALTER TABLE `email_account`
 --     ADD COLUMN `created_by` VARCHAR(64) DEFAULT NULL COMMENT '录入人(登录账号)' AFTER `raw_data`,
 --     ADD KEY `idx_created_by` (`created_by`);
+--
+-- [2026-09-21] 新增 Apple ID 录入模块：直接执行上面 apple_account / apple_hide_email
+-- 两段 CREATE TABLE 即可（含 IF NOT EXISTS，重跑安全）。生产库发版前需先建表。
+--
+-- [2026-09-21] apple_hide_email 增加 google_alias_email（每条记录同时录 HackerOne 邮箱与谷歌别名邮箱）：
+-- ALTER TABLE `apple_hide_email`
+--     ADD COLUMN `google_alias_email` VARCHAR(255) DEFAULT NULL
+--         COMMENT '谷歌别名邮箱' AFTER `redirect_email`,
+--     ADD KEY `idx_google_alias_email` (`google_alias_email`);
+-- 同日曾短暂存在过的 `type` 列（区分两类录入）已废弃：
+-- ALTER TABLE `apple_hide_email` DROP KEY `idx_type`, DROP COLUMN `type`;

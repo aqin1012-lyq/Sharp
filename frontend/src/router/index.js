@@ -33,6 +33,12 @@ const routes = [
         meta: { title: '邮件取件' }
       },
       {
+        path: 'apple',
+        name: 'AppleManage',
+        component: () => import('../views/AppleManage.vue'),
+        meta: { title: 'Apple ID 录入' }
+      },
+      {
         path: 'stats',
         name: 'StatsEntry',
         component: () => import('../views/StatsEntry.vue'),

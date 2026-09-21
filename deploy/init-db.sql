@@ -76,6 +76,36 @@ CREATE TABLE IF NOT EXISTS `email_account` (
     KEY `idx_uuid` (`uuid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='邮箱账号表';
 
+-- Apple ID 账号表：一个 Apple ID 下可挂多个隐藏邮箱。只记账号与备注，不存密码 / 2FA。
+CREATE TABLE IF NOT EXISTS `apple_account` (
+    `id`          BIGINT        NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `apple_id`    VARCHAR(255)  NOT NULL COMMENT 'Apple ID 账号',
+    `note`        VARCHAR(1024) DEFAULT NULL COMMENT '备注',
+    `created_by`  VARCHAR(64)   DEFAULT NULL COMMENT '录入人(登录账号)',
+    `create_time` DATETIME      DEFAULT NULL COMMENT '创建时间',
+    `update_time` DATETIME      DEFAULT NULL COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_apple_id` (`apple_id`),
+    KEY `idx_created_by` (`created_by`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Apple ID 账号表';
+
+-- Apple 隐藏邮箱表：隐藏邮箱(xxx@privaterelay.appleid.com) → 同时记录两个转发目标。
+CREATE TABLE IF NOT EXISTS `apple_hide_email` (
+    `id`                 BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `apple_account_id`   BIGINT       NOT NULL COMMENT '所属 Apple ID(apple_account.id)',
+    `hide_email`         VARCHAR(255) NOT NULL COMMENT '隐藏邮箱',
+    `redirect_email`     VARCHAR(255) DEFAULT NULL COMMENT 'HackerOne 邮箱',
+    `google_alias_email` VARCHAR(255) DEFAULT NULL COMMENT '谷歌别名邮箱',
+    `created_by`         VARCHAR(64)  DEFAULT NULL COMMENT '录入人(登录账号)',
+    `create_time`        DATETIME     DEFAULT NULL COMMENT '创建时间',
+    `update_time`        DATETIME     DEFAULT NULL COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_hide_email` (`hide_email`),
+    KEY `idx_apple_account_id` (`apple_account_id`),
+    KEY `idx_redirect_email` (`redirect_email`),
+    KEY `idx_google_alias_email` (`google_alias_email`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Apple 隐藏邮箱表';
+
 -- ---------- 3.1 已有库的增量迁移（下列 ALTER 截至 2026-09-18 均已应用到生产库）----------
 -- 上面的 CREATE TABLE IF NOT EXISTS 对**已存在**的表不生效，老库补列 / 改类型要执行下面这段。
 -- MySQL 不支持 ADD COLUMN IF NOT EXISTS，已经加过的话会报 Duplicate column name，可忽略。
