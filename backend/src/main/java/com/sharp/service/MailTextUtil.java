@@ -23,6 +23,9 @@ public final class MailTextUtil {
             Pattern.CASE_INSENSITIVE);
     private static final Pattern CODE_FALLBACK = Pattern.compile("(?<!\\d)(\\d{4,8})(?!\\d)");
 
+    /** 嵌入前端的 HTML 正文最大保留长度（字符）。 */
+    private static final int MAX_HTML_LEN = 512 * 1024;
+
     /** 从主题+正文提取验证码。 */
     public static String extractCode(String subject, String body) {
         String text = ((subject == null ? "" : subject) + "\n" + (body == null ? "" : body));
@@ -119,6 +122,60 @@ public final class MailTextUtil {
         }
         Object c = part.getContent();
         return c instanceof String s ? s : "";
+    }
+
+    /** 递归取 MIME 里的 HTML 正文原文；没有 HTML 版本返回 null。 */
+    public static String extractHtml(Part part) throws Exception {
+        if (part.isMimeType("text/html")) {
+            Object c = part.getContent();
+            return c == null ? null : c.toString();
+        }
+        if (part.isMimeType("multipart/alternative")) {
+            // alternative 里越靠后的版本越「富」，取最后一个 HTML
+            Multipart mp = (Multipart) part.getContent();
+            String last = null;
+            for (int i = 0; i < mp.getCount(); i++) {
+                String s = extractHtml(mp.getBodyPart(i));
+                if (s != null && !s.isBlank()) {
+                    last = s;
+                }
+            }
+            return last;
+        }
+        if (part.isMimeType("multipart/*")) {
+            // mixed / related：正文通常是第一段，附件里的 html 不要
+            Multipart mp = (Multipart) part.getContent();
+            for (int i = 0; i < mp.getCount(); i++) {
+                String s = extractHtml(mp.getBodyPart(i));
+                if (s != null && !s.isBlank()) {
+                    return s;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 轻量清洗要嵌入前端的 HTML：去掉脚本、内联事件、可执行嵌入与自带 base，
+     * 保留 style 与排版标签。真正的隔离靠前端 sandbox iframe（不给 allow-scripts），
+     * 这里只是第二道闸。超长正文截断，避免个别营销邮件把响应撑爆。
+     */
+    public static String sanitizeHtml(String html) {
+        if (html == null) {
+            return null;
+        }
+        String s = html
+                .replaceAll("(?is)<script[^>]*>.*?</script>", "")
+                .replaceAll("(?is)<script[^>]*>", "")
+                .replaceAll("(?is)</?(iframe|object|embed|applet|form|base)[^>]*>", "")
+                .replaceAll("(?is)\\son[a-z]+\\s*=\\s*\"[^\"]*\"", "")
+                .replaceAll("(?is)\\son[a-z]+\\s*=\\s*'[^']*'", "")
+                .replaceAll("(?is)\\son[a-z]+\\s*=\\s*[^\\s>]+", "")
+                .replaceAll("(?i)javascript:", "");
+        if (s.length() > MAX_HTML_LEN) {
+            s = s.substring(0, MAX_HTML_LEN);
+        }
+        return s.isBlank() ? null : s;
     }
 
     /** 解 MIME 编码字（如主题、发件人显示名）；失败原样返回。 */

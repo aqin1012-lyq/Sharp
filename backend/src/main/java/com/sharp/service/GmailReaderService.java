@@ -219,6 +219,7 @@ public class GmailReaderService {
 
         String body = MailTextUtil.extractText(msg);
         dto.setBody(body);
+        dto.setBodyHtml(MailTextUtil.sanitizeHtml(MailTextUtil.extractHtml(msg)));
         dto.setPreview(MailTextUtil.trim(body.replaceAll("\\s+", " ").trim(), 200));
         dto.setVerifyCode(MailTextUtil.extractCode(dto.getSubject(), body));
         return dto;

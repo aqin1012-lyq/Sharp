@@ -14,7 +14,7 @@ import java.util.List;
 
 /**
  * 012e 取件：账号自带一个「取件链接」（getcode API），GET 即返回最新邮件的 HTML。
- * 无需密码/OAuth——把 HTML 剥成纯文本并提取验证码即可。
+ * 无需密码/OAuth——原始 HTML 直接回传给前端渲染，另剥一份纯文本用于提取验证码。
  */
 @Service
 public class Mail012eService {
@@ -58,6 +58,8 @@ public class Mail012eService {
             dto.setFolder("取件");
             dto.setFrom("012e");
             dto.setBody(body);
+            // 取件链接返回的就是 HTML；非 HTML（纯文本兜底）时不给前端 bodyHtml
+            dto.setBodyHtml(raw.contains("<") ? MailTextUtil.sanitizeHtml(raw) : null);
             dto.setPreview(MailTextUtil.trim(body.replaceAll("\\s+", " ").trim(), 200));
             dto.setVerifyCode(MailTextUtil.extractCode(null, body));
             result.add(dto);

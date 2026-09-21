@@ -192,9 +192,25 @@
           </div>
           <div v-if="expanded[i]" class="mail-body">
             <div class="mail-body-tools">
+              <el-radio-group
+                v-if="m.bodyHtml"
+                v-model="viewMode[i]"
+                class="type-chips view-chips"
+                size="small"
+              >
+                <el-radio-button value="html">原文</el-radio-button>
+                <el-radio-button value="text">纯文本</el-radio-button>
+              </el-radio-group>
               <el-button text size="small" @click="copyText(m.body, '已复制正文')">复制正文</el-button>
             </div>
-            <pre class="mail-body-text">{{ m.body || '（无正文）' }}</pre>
+            <iframe
+              v-if="m.bodyHtml && viewMode[i] !== 'text'"
+              class="mail-html"
+              sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+              :srcdoc="htmlDoc(m.bodyHtml)"
+              @load="autoHeight"
+            ></iframe>
+            <pre v-else class="mail-body-text">{{ m.body || '（无正文）' }}</pre>
           </div>
         </div>
       </div>
@@ -219,6 +235,7 @@ const limit = ref(10)
 const loading = ref(false)
 const messages = ref([])
 const expanded = reactive({})
+const viewMode = reactive({})          // 每封邮件的正文视图：html | text
 const fetchedAt = ref('')
 
 const providerLabel = computed(() => ({ gmail: 'Gmail', '012e': '012e' }[provider.value] || 'Outlook'))
@@ -427,6 +444,7 @@ async function handleFetch() {
   loading.value = true
   messages.value = []
   for (const k of Object.keys(expanded)) delete expanded[k]
+  for (const k of Object.keys(viewMode)) delete viewMode[k]
   try {
     const payload = { provider: provider.value, folder: folder.value, limit: limit.value }
     if (provider.value === 'gmail') payload.authMode = gmailAuth.value
@@ -454,6 +472,41 @@ async function handleFetch() {
 
 function toggle(i) {
   expanded[i] = !expanded[i]
+  // 有 HTML 正文的默认看原文
+  if (expanded[i] && !viewMode[i]) viewMode[i] = 'html'
+}
+
+/**
+ * 把邮件 HTML 包成一份最小文档喂给 iframe：
+ * 链接新窗口打开、禁脚本、图片不撑破容器；深浅主题下统一白底黑字，保证可读。
+ */
+function htmlDoc(bodyHtml) {
+  return `<!doctype html><html><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="script-src 'none'">
+<base target="_blank">
+<style>
+  html,body{margin:0;padding:0;background:#fff;color:#1f2328;}
+  body{font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;padding:12px;word-break:break-word;}
+  img{max-width:100%;height:auto;}
+  img[src^="cid:"]{display:none;}   /* 内联附件图未随正文取回，藏掉裂图 */
+  table{max-width:100%;}
+  a{color:#2563eb;}
+</style></head><body>${bodyHtml}</body></html>`
+}
+
+/** iframe 无法自适应高度，按内容实测（无 allow-scripts，邮件脚本不会执行）。图片加载完再量一次。 */
+function autoHeight(e) {
+  const el = e.target
+  const measure = () => {
+    try {
+      const h = el.contentDocument?.documentElement?.scrollHeight
+      el.style.height = h ? `${Math.min(h + 16, 640)}px` : '420px'
+    } catch {
+      el.style.height = '420px'
+    }
+  }
+  measure()
+  setTimeout(measure, 600)
 }
 
 function clearAll() {
@@ -468,6 +521,8 @@ function clearAll() {
   manual.extraUrl = ''
   messages.value = []
   fetchedAt.value = ''
+  for (const k of Object.keys(expanded)) delete expanded[k]
+  for (const k of Object.keys(viewMode)) delete viewMode[k]
 }
 
 function fmtDate(iso) {
@@ -694,7 +749,23 @@ async function copyText(text, msg) {
   background: var(--surface-2);
   padding: 12px 16px 16px;
 }
-.mail-body-tools { margin-bottom: 6px; }
+.mail-body-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.view-chips :deep(.el-radio-button__inner) { margin-right: 6px; padding: 4px 12px; }
+/* 邮件原文：沙箱 iframe，固定白底避免深色主题下邮件自带的深色文字不可读 */
+.mail-html {
+  display: block;
+  width: 100%;
+  height: 420px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+}
 .mail-body-text {
   margin: 0;
   font-family: var(--mono);

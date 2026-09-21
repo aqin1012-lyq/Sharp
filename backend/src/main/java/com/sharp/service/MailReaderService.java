@@ -190,7 +190,11 @@ public class MailReaderService {
         JsonNode bodyNode = m.path("body");
         String contentType = bodyNode.path("contentType").asText("text");
         String content = bodyNode.path("content").asText("");
-        String body = "html".equalsIgnoreCase(contentType) ? MailTextUtil.htmlToText(content) : content;
+        boolean html = "html".equalsIgnoreCase(contentType);
+        String body = html ? MailTextUtil.htmlToText(content) : content;
+        if (html) {
+            dto.setBodyHtml(MailTextUtil.sanitizeHtml(content));
+        }
         if (MailTextUtil.isBlank(body)) {
             body = m.path("bodyPreview").asText("");
         }
