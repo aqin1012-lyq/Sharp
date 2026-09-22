@@ -141,3 +141,15 @@ body {
   text-transform: uppercase;
   color: var(--muted);
 }
+
+/* —— 删除确认气泡：默认 150px 会把一句话挤成两行，这里缩小字号并禁止换行 —— */
+.el-popconfirm__main {
+  font-size: 12.5px;
+  white-space: nowrap;
+  align-items: center;
+}
+.el-popconfirm__action { margin-top: 8px; }
+.el-popconfirm__action .el-button--small {
+  font-size: 12px;
+  padding: 4px 10px;
+}

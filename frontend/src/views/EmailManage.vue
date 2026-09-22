@@ -423,7 +423,7 @@
         <el-table-column prop="updateTime" label="更新时间" width="170" />
         <el-table-column label="操作" width="90" fixed="right">
           <template #default="{ row }">
-            <el-popconfirm title="确认删除该记录？" @confirm="handleDelete(row.id)">
+            <el-popconfirm title="确认删除该记录？" :width="190" @confirm="handleDelete(row.id)">
               <template #reference>
                 <el-button type="danger" text size="small">删除</el-button>
               </template>

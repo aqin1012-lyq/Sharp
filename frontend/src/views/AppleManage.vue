@@ -187,7 +187,7 @@
         <el-table-column label="操作" width="128" fixed="right">
           <template #default="{ row }">
             <el-button text type="primary" size="small" @click="openEdit(row)">编辑</el-button>
-            <el-popconfirm title="确认删除该记录？" @confirm="handleDelete(row.id)">
+            <el-popconfirm title="确认删除该记录？" :width="190" @confirm="handleDelete(row.id)">
               <template #reference>
                 <el-button text type="danger" size="small">删除</el-button>
               </template>
