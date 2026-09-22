@@ -18,6 +18,8 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 
 /**
  * Outlook 邮件取件（复刻 2fa.run/mail）：
@@ -138,7 +140,8 @@ public class MailReaderService {
                              List<MailMessageDto> out) throws Exception {
         String url = graphBase + "/me/mailFolders/" + folderId + "/messages"
                 + "?$top=" + Math.max(1, limit)
-                + "&$select=subject,from,receivedDateTime,body,bodyPreview"
+                + "&$select=subject,from,sender,toRecipients,ccRecipients,replyTo,"
+                + "receivedDateTime,body,bodyPreview,internetMessageHeaders"
                 + "&$orderby=receivedDateTime%20desc";
         HttpClient client = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofMillis(connectTimeoutMs))
@@ -177,6 +180,10 @@ public class MailReaderService {
             dto.setFrom(textOrNull(fromAddr.path("address")));
             dto.setFromName(textOrNull(fromAddr.path("name")));
         }
+        dto.setTo(joinRecipients(m.path("toRecipients")));
+        dto.setCc(joinRecipients(m.path("ccRecipients")));
+        dto.setReplyTo(joinRecipients(m.path("replyTo")));
+        dto.setForwardedTo(MailTextUtil.extractForwardedTo(headersOf(m)));
 
         String received = textOrNull(m.path("receivedDateTime"));
         if (received != null) {
@@ -206,6 +213,38 @@ public class MailReaderService {
 
     private static String enc(String s) {
         return URLEncoder.encode(s == null ? "" : s, StandardCharsets.UTF_8);
+    }
+
+    /** Graph 的 recipients 数组（[{emailAddress:{address,name}}]）→ "a@x, b@y"；空则 null。 */
+    private static String joinRecipients(JsonNode array) {
+        if (array == null || !array.isArray() || array.isEmpty()) {
+            return null;
+        }
+        java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
+        for (JsonNode n : array) {
+            String addr = textOrNull(n.path("emailAddress").path("address"));
+            if (addr != null && !addr.isBlank()) {
+                out.add(addr.trim().toLowerCase());
+            }
+        }
+        return out.isEmpty() ? null : String.join(", ", out);
+    }
+
+    /** internetMessageHeaders（[{name,value}]）→ 不区分大小写的 name → values。 */
+    private static Map<String, List<String>> headersOf(JsonNode m) {
+        JsonNode headers = m.path("internetMessageHeaders");
+        if (!headers.isArray() || headers.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, List<String>> out = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        for (JsonNode h : headers) {
+            String name = textOrNull(h.path("name"));
+            String value = textOrNull(h.path("value"));
+            if (name != null && value != null) {
+                out.computeIfAbsent(name, k -> new ArrayList<>()).add(value);
+            }
+        }
+        return out;
     }
 
     private static String textOrNull(JsonNode node) {

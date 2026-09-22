@@ -1,9 +1,14 @@
 package com.sharp.service;
 
+import jakarta.mail.Address;
 import jakarta.mail.Multipart;
 import jakarta.mail.Part;
+import jakarta.mail.internet.InternetAddress;
 import jakarta.mail.internet.MimeUtility;
 
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -176,6 +181,63 @@ public final class MailTextUtil {
             s = s.substring(0, MAX_HTML_LEN);
         }
         return s.isBlank() ? null : s;
+    }
+
+    /** 投递 / 转发相关的邮件头，值直接就是地址。 */
+    private static final List<String> FORWARD_HEADERS =
+            List.of("Delivered-To", "X-Forwarded-To", "X-Original-To", "Envelope-To", "X-Delivered-To");
+    /** Received 头里的 {@code for <addr>} 片段。 */
+    private static final Pattern RECEIVED_FOR = Pattern.compile("(?i)\\bfor\\s+<?([^\\s<>;]+@[^\\s<>;]+)>?");
+
+    /**
+     * 从邮件头里提取投递 / 转发链路上的地址：先取 Delivered-To 一类头，
+     * 再从 Received 头里捞 {@code for <addr>}。去重且保持出现顺序，没有则返回 null。
+     * headers 的 key 需不区分大小写（两个取件服务都按此构造）。
+     */
+    public static String extractForwardedTo(Map<String, List<String>> headers) {
+        if (headers == null || headers.isEmpty()) {
+            return null;
+        }
+        LinkedHashSet<String> out = new LinkedHashSet<>();
+        for (String name : FORWARD_HEADERS) {
+            for (String v : headers.getOrDefault(name, List.of())) {
+                addAddress(out, v);
+            }
+        }
+        for (String received : headers.getOrDefault("Received", List.of())) {
+            Matcher m = RECEIVED_FOR.matcher(received == null ? "" : received);
+            while (m.find()) {
+                addAddress(out, m.group(1));
+            }
+        }
+        return out.isEmpty() ? null : String.join(", ", out);
+    }
+
+    /** 清掉尖括号/首尾空白后按小写入集合，空值忽略。 */
+    private static void addAddress(LinkedHashSet<String> out, String raw) {
+        if (raw == null) {
+            return;
+        }
+        String s = raw.trim().replaceAll("^<|>$", "").trim().toLowerCase();
+        if (!s.isEmpty() && s.contains("@")) {
+            out.add(s);
+        }
+    }
+
+    /** 地址数组 → "a@x.com, b@y.com"；空则返回 null。显示名丢弃，只留地址。 */
+    public static String joinAddresses(Address[] addresses) {
+        if (addresses == null || addresses.length == 0) {
+            return null;
+        }
+        LinkedHashSet<String> out = new LinkedHashSet<>();
+        for (Address a : addresses) {
+            if (a instanceof InternetAddress ia && ia.getAddress() != null) {
+                addAddress(out, ia.getAddress());
+            } else if (a != null) {
+                addAddress(out, a.toString());
+            }
+        }
+        return out.isEmpty() ? null : String.join(", ", out);
     }
 
     /** 解 MIME 编码字（如主题、发件人显示名）；失败原样返回。 */

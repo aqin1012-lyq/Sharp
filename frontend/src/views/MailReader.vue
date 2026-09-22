@@ -191,6 +191,16 @@
             </div>
           </div>
           <div v-if="expanded[i]" class="mail-body">
+            <!-- 信头明细：收件人 / 抄送 / 回复至 / 投递链路 -->
+            <dl class="mail-headers">
+              <template v-for="h in headerRows(m)" :key="h.k">
+                <dt>{{ h.k }}</dt>
+                <dd class="mono">
+                  {{ h.v }}
+                  <el-icon class="copy-h" title="复制" @click="copyText(h.v, `已复制${h.k}`)"><CopyDocument /></el-icon>
+                </dd>
+              </template>
+            </dl>
             <div class="mail-body-tools">
               <el-radio-group
                 v-if="m.bodyHtml"
@@ -476,6 +486,19 @@ function toggle(i) {
   if (expanded[i] && !viewMode[i]) viewMode[i] = 'html'
 }
 
+/** 展开后要显示的信头行，空字段不占位。 */
+function headerRows(m) {
+  const rows = [
+    ['发件人', m.fromName ? `${m.fromName} <${m.from}>` : m.from],
+    ['收件人', m.to],
+    ['抄送', m.cc],
+    ['回复至', m.replyTo],
+    ['投递链路', m.forwardedTo],
+    ['文件夹', m.folder]
+  ]
+  return rows.filter(([, v]) => !!v).map(([k, v]) => ({ k, v }))
+}
+
 /**
  * 把邮件 HTML 包成一份最小文档喂给 iframe：
  * 链接新窗口打开、禁脚本、图片不撑破容器；深浅主题下统一白底黑字，保证可读。
@@ -756,6 +779,34 @@ async function copyText(text, msg) {
   flex-wrap: wrap;
   margin-bottom: 8px;
 }
+/* 信头明细：左标签右值，值可换行 */
+.mail-headers {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 14px;
+  margin: 0 0 12px;
+  padding: 0 0 10px;
+  border-bottom: 1px dashed var(--border);
+  font-size: 12.5px;
+}
+.mail-headers dt {
+  color: var(--faint);
+  white-space: nowrap;
+}
+.mail-headers dd {
+  margin: 0;
+  color: var(--ink);
+  word-break: break-all;
+  font-size: 12px;
+}
+.copy-h {
+  cursor: pointer;
+  color: var(--faint);
+  opacity: 0;
+  transition: opacity .12s ease;
+  vertical-align: -2px;
+}
+.mail-headers dd:hover .copy-h { opacity: 1; }
 .view-chips :deep(.el-radio-button__inner) { margin-right: 6px; padding: 4px 12px; }
 /* 邮件原文：沙箱 iframe，固定白底避免深色主题下邮件自带的深色文字不可读 */
 .mail-html {

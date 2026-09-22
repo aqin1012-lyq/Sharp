@@ -1,13 +1,18 @@
 package com.sharp;
 
 import com.sharp.service.MailTextUtil;
+import jakarta.mail.Address;
 import jakarta.mail.Session;
+import jakarta.mail.internet.InternetAddress;
 import jakarta.mail.internet.MimeBodyPart;
 import jakarta.mail.internet.MimeMessage;
 import jakarta.mail.internet.MimeMultipart;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Properties;
+import java.util.TreeMap;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -68,5 +73,42 @@ class MailTextUtilTest {
     void sanitizeHtmlHandlesNullAndBlank() {
         assertNull(MailTextUtil.sanitizeHtml(null));
         assertNull(MailTextUtil.sanitizeHtml("<script>alert(1)</script>"));
+    }
+
+    @Test
+    void extractForwardedToCollectsDeliveryChain() {
+        Map<String, List<String>> headers = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        headers.put("delivered-to", List.of("Real.Box@outlook.com"));           // key 大小写不敏感
+        headers.put("X-Forwarded-To", List.of("<alias@privaterelay.appleid.com>"));
+        headers.put("Received", List.of(
+                "from mx.apple.com by outlook.com for <real.box@outlook.com>; Mon, 21 Sep 2026 10:00:00",
+                "by relay.appleid.com for alias@privaterelay.appleid.com;"));
+
+        // 去重（大小写归一）且保持「先直接头、后 Received」的顺序
+        assertEquals("real.box@outlook.com, alias@privaterelay.appleid.com",
+                MailTextUtil.extractForwardedTo(headers));
+    }
+
+    @Test
+    void extractForwardedToIgnoresHeadersWithoutAddresses() {
+        Map<String, List<String>> headers = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        headers.put("Received", List.of("from mx.apple.com by outlook.com; Mon, 21 Sep 2026 10:00:00"));
+        headers.put("Subject", List.of("你的验证码"));
+
+        assertNull(MailTextUtil.extractForwardedTo(headers));
+        assertNull(MailTextUtil.extractForwardedTo(Map.of()));
+        assertNull(MailTextUtil.extractForwardedTo(null));
+    }
+
+    @Test
+    void joinAddressesKeepsAddressesOnly() throws Exception {
+        Address[] addrs = {
+                new InternetAddress("Alice <Alice@Example.com>"),
+                new InternetAddress("bob@example.com"),
+                new InternetAddress("alice@example.com")   // 与第一个重复，应去掉
+        };
+        assertEquals("alice@example.com, bob@example.com", MailTextUtil.joinAddresses(addrs));
+        assertNull(MailTextUtil.joinAddresses(new Address[0]));
+        assertNull(MailTextUtil.joinAddresses(null));
     }
 }

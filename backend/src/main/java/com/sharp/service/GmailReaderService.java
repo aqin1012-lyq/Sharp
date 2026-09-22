@@ -175,10 +175,11 @@ public class GmailReaderService {
             }
             int start = Math.max(1, total - limit + 1);
             Message[] msgs = box.getMessages(start, total);
-            // 一次性预取信封/标志/正文结构，减少逐封往返（高延迟网络下是超时主因）
+            // 一次性预取信封/标志/正文结构 + 全部邮件头，减少逐封往返（高延迟网络下是超时主因）
             FetchProfile fp = new FetchProfile();
             fp.add(FetchProfile.Item.ENVELOPE);
             fp.add(FetchProfile.Item.CONTENT_INFO);
+            fp.add(org.eclipse.angus.mail.imap.IMAPFolder.FetchProfileItem.HEADERS);
             box.fetch(msgs, fp);
             // getMessages 按邮件号升序（旧→新），倒序成新→旧
             for (int i = msgs.length - 1; i >= 0; i--) {
@@ -217,6 +218,11 @@ public class GmailReaderService {
             dto.setDate(received.toInstant().atZone(ZoneId.systemDefault()).format(ISO));
         }
 
+        dto.setTo(MailTextUtil.joinAddresses(msg.getRecipients(Message.RecipientType.TO)));
+        dto.setCc(MailTextUtil.joinAddresses(msg.getRecipients(Message.RecipientType.CC)));
+        dto.setReplyTo(MailTextUtil.joinAddresses(msg.getReplyTo()));
+        dto.setForwardedTo(MailTextUtil.extractForwardedTo(headersOf(msg)));
+
         String body = MailTextUtil.extractText(msg);
         dto.setBody(body);
         dto.setBodyHtml(MailTextUtil.sanitizeHtml(MailTextUtil.extractHtml(msg)));
@@ -227,6 +233,24 @@ public class GmailReaderService {
 
     private static String enc(String s) {
         return URLEncoder.encode(s == null ? "" : s, StandardCharsets.UTF_8);
+    }
+
+    /** 整封邮件头 → 不区分大小写的 name → values（供提取投递链路）。读不到就返回空表。 */
+    private static java.util.Map<String, java.util.List<String>> headersOf(Message msg) {
+        java.util.Map<String, java.util.List<String>> out =
+                new java.util.TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        try {
+            java.util.Enumeration<jakarta.mail.Header> e = msg.getAllHeaders();
+            while (e.hasMoreElements()) {
+                jakarta.mail.Header h = e.nextElement();
+                if (h.getName() != null && h.getValue() != null) {
+                    out.computeIfAbsent(h.getName(), k -> new ArrayList<>()).add(h.getValue());
+                }
+            }
+        } catch (Exception ignore) {
+            // 单封读头失败不影响其余字段
+        }
+        return out;
     }
 
     private static String nullSafe(String s) {

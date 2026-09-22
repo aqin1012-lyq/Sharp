@@ -14,6 +14,22 @@ public class MailMessageDto {
     /** 发件人显示名 */
     private String fromName;
 
+    /** 收件人（多个以 , 分隔） */
+    private String to;
+
+    /** 抄送（多个以 , 分隔） */
+    private String cc;
+
+    /** 回复地址 */
+    private String replyTo;
+
+    /**
+     * 投递 / 转发链路：Delivered-To、X-Forwarded-To、X-Original-To、Envelope-To
+     * 以及 Received 头里 {@code for <addr>} 的地址，去重后以 , 分隔。
+     * 隐藏邮箱、别名转发的真实落点就在这里。
+     */
+    private String forwardedTo;
+
     /** 主题 */
     private String subject;
 
