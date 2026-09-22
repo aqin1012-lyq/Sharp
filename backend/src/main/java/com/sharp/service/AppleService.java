@@ -105,8 +105,39 @@ public class AppleService {
         return saved;
     }
 
-    public AppleHideEmail updateHideEmail(AppleHideEmail entity) {
-        return hideEmailRepository.save(entity);
+    /**
+     * 局部更新一条隐藏邮箱：只改传进来的字段，没传的保持原值
+     * （整体 save 会把漏传的字段清成 null）。空字符串表示清空该字段。
+     */
+    public AppleHideEmail updateHideEmail(Long id, AppleHideEmail patch) {
+        AppleHideEmail exist = hideEmailRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("记录不存在：" + id));
+
+        if (patch.getHideEmail() != null) {
+            String hide = patch.getHideEmail().trim();
+            if (hide.isEmpty()) {
+                throw new IllegalArgumentException("隐藏邮箱不能为空");
+            }
+            // 换成别人已占用的地址要拦下来
+            hideEmailRepository.findByHideEmail(hide)
+                    .filter(other -> !other.getId().equals(id))
+                    .ifPresent(other -> {
+                        throw new IllegalArgumentException("隐藏邮箱已存在（#" + other.getId() + "）");
+                    });
+            exist.setHideEmail(hide);
+        }
+        if (patch.getRedirectEmail() != null) {
+            exist.setRedirectEmail(trimToNull(patch.getRedirectEmail()));
+        }
+        if (patch.getGoogleAliasEmail() != null) {
+            exist.setGoogleAliasEmail(trimToNull(patch.getGoogleAliasEmail()));
+        }
+        if (patch.getAppleAccountId() != null) {
+            exist.setAppleAccountId(patch.getAppleAccountId());
+        }
+        AppleHideEmail saved = hideEmailRepository.save(exist);
+        fillAppleId(List.of(saved));
+        return saved;
     }
 
     public void deleteHideEmail(Long id) {

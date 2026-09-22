@@ -65,10 +65,10 @@ public class AppleController {
                 req.getRedirectEmail(), req.getGoogleAliasEmail(), currentUser()));
     }
 
+    /** 局部更新：只改传进来的字段。 */
     @PutMapping("/hide-emails/{id}")
-    public Result<AppleHideEmail> updateHideEmail(@PathVariable Long id, @RequestBody AppleHideEmail entity) {
-        entity.setId(id);
-        return Result.ok(service.updateHideEmail(entity));
+    public Result<AppleHideEmail> updateHideEmail(@PathVariable Long id, @RequestBody AppleHideEmail patch) {
+        return Result.ok(service.updateHideEmail(id, patch));
     }
 
     @DeleteMapping("/hide-emails/{id}")

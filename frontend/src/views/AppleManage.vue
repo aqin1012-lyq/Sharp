@@ -184,8 +184,9 @@
         <el-table-column prop="appleId" label="所属 Apple ID" min-width="200" />
         <el-table-column prop="createdBy" label="录入人" width="110" />
         <el-table-column prop="createTime" label="创建时间" width="170" />
-        <el-table-column label="操作" width="90" fixed="right">
+        <el-table-column label="操作" width="128" fixed="right">
           <template #default="{ row }">
+            <el-button text type="primary" size="small" @click="openEdit(row)">编辑</el-button>
             <el-popconfirm title="确认删除该记录？" @confirm="handleDelete(row.id)">
               <template #reference>
                 <el-button text type="danger" size="small">删除</el-button>
@@ -206,13 +207,35 @@
         @size-change="onSizeChange"
       />
     </el-card>
+
+    <!-- 编辑 -->
+    <el-dialog v-model="editVisible" title="编辑记录" width="520px">
+      <el-form label-width="120px">
+        <el-form-item label="所属 Apple ID">
+          <span class="mono-text">{{ editForm.appleId || '—' }}</span>
+        </el-form-item>
+        <el-form-item label="谷歌别名邮箱">
+          <el-input v-model="editForm.googleAliasEmail" placeholder="xxx+apple@gmail.com" />
+        </el-form-item>
+        <el-form-item label="隐藏邮箱">
+          <el-input v-model="editForm.hideEmail" placeholder="xxx@privaterelay.appleid.com" />
+        </el-form-item>
+        <el-form-item label="HackerOne 邮箱">
+          <el-input v-model="editForm.redirectEmail" placeholder="xxx@wearehackerone.com" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="editVisible = false">取消</el-button>
+        <el-button type="primary" :loading="editSaving" :disabled="!canSaveEdit" @click="handleUpdate">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { listAppleAccounts, listHideEmails, saveHideEmail, deleteHideEmail } from '../api/apple'
+import { listAppleAccounts, listHideEmails, saveHideEmail, updateHideEmail, deleteHideEmail } from '../api/apple'
 import { listEmail } from '../api/email'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -374,6 +397,41 @@ async function handleDelete(id) {
   }
 }
 
+/* —— 编辑 —— */
+const editVisible = ref(false)
+const editSaving = ref(false)
+const editForm = reactive({ id: null, appleId: '', hideEmail: '', redirectEmail: '', googleAliasEmail: '' })
+
+function openEdit(row) {
+  editForm.id = row.id
+  editForm.appleId = row.appleId || ''
+  editForm.hideEmail = row.hideEmail || ''
+  editForm.redirectEmail = row.redirectEmail || ''
+  editForm.googleAliasEmail = row.googleAliasEmail || ''
+  editVisible.value = true
+}
+
+// 隐藏邮箱必填；两个转发邮箱允许留空（老数据可能就缺一个）
+const canSaveEdit = computed(() => EMAIL_RE.test(editForm.hideEmail.trim()))
+
+async function handleUpdate() {
+  editSaving.value = true
+  try {
+    await updateHideEmail(editForm.id, {
+      hideEmail: editForm.hideEmail.trim(),
+      redirectEmail: editForm.redirectEmail.trim(),
+      googleAliasEmail: editForm.googleAliasEmail.trim()
+    })
+    ElMessage.success('已保存')
+    editVisible.value = false
+    await load()
+  } catch {
+    // 错误信息已由 request 拦截器统一提示
+  } finally {
+    editSaving.value = false
+  }
+}
+
 onMounted(() => {
   searchAccounts('')
   load()
@@ -448,5 +506,6 @@ onMounted(() => {
   margin-bottom: 14px;
 }
 .muted-cell { color: var(--faint); }
+.mono-text { font-family: var(--mono); font-size: 12.5px; color: var(--ink); word-break: break-all; }
 .pagination { margin-top: 14px; justify-content: flex-end; }
 </style>

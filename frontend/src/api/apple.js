@@ -20,6 +20,10 @@ export function saveHideEmail(data) {
   return request.post('/apple/hide-emails', data)
 }
 
+export function updateHideEmail(id, data) {
+  return request.put(`/apple/hide-emails/${id}`, data)
+}
+
 export function deleteHideEmail(id) {
   return request.delete(`/apple/hide-emails/${id}`)
 }
