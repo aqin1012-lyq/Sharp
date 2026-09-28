@@ -19,6 +19,9 @@ public interface EmailAccountRepository extends JpaRepository<EmailAccount, Long
                               @Param("keyword") String keyword,
                               Pageable pageable);
 
+    /** 按地址找账号（Apple 倒推接码用：转发邮箱 → 已录入账号）。 */
+    java.util.Optional<EmailAccount> findFirstByEmailIgnoreCase(String email);
+
     /** 按录入人分组统计条数，多到少排序；返回 [createdBy, count]。 */
     @Query("SELECT e.createdBy, COUNT(e) FROM EmailAccount e GROUP BY e.createdBy ORDER BY COUNT(e) DESC")
     java.util.List<Object[]> countByCreatedBy();
