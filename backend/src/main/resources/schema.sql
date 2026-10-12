@@ -124,6 +124,45 @@ CREATE TABLE IF NOT EXISTS `apple_code_log` (
     KEY `idx_create_time` (`create_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Apple 接码/切换/检测日志';
 
+-- Claude 账号表：按「claude账号----邮箱账号----邮箱密码----SK----ID」格式拆分入库，
+-- 原始串完整保存在 raw_data 便于追溯。分隔符为 2 个及以上连字符（SK 内部单个 '-' 不受影响）。
+CREATE TABLE IF NOT EXISTS `claude_account` (
+    `id`             BIGINT        NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `claude_account` VARCHAR(255)  DEFAULT NULL COMMENT 'Claude 账号',
+    `email`          VARCHAR(255)  DEFAULT NULL COMMENT '邮箱账号',
+    `email_password` VARCHAR(255)  DEFAULT NULL COMMENT '邮箱密码',
+    `sk`             TEXT          DEFAULT NULL COMMENT 'SK(密钥)',
+    `account_id`     VARCHAR(255)  DEFAULT NULL COMMENT 'ID',
+    `raw_data`       TEXT          DEFAULT NULL COMMENT '原始信息',
+    `created_by`     VARCHAR(64)   DEFAULT NULL COMMENT '录入人(登录账号)',
+    `create_time`    DATETIME      DEFAULT NULL COMMENT '创建时间',
+    `update_time`    DATETIME      DEFAULT NULL COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    KEY `idx_claude_account` (`claude_account`),
+    KEY `idx_claude_email` (`email`),
+    KEY `idx_claude_created_by` (`created_by`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Claude 账号表';
+
+-- 供应商表：按「IP:端口:用户名:密码:地区:到期时间」格式拆分入库，原始串完整保存在 raw_data 便于追溯。
+-- 分隔符为单个冒号，最后一段吞掉剩余原文（到期时间带 "HH:mm:ss" 也不会被拆开）。
+CREATE TABLE IF NOT EXISTS `supplier` (
+    `id`          BIGINT        NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `ip`          VARCHAR(255)  DEFAULT NULL COMMENT '供应商 IP',
+    `port`        VARCHAR(32)   DEFAULT NULL COMMENT '端口号',
+    `username`    VARCHAR(255)  DEFAULT NULL COMMENT '用户名',
+    `password`    VARCHAR(255)  DEFAULT NULL COMMENT '密码',
+    `region`      VARCHAR(128)  DEFAULT NULL COMMENT '用户地区',
+    `expire_time` VARCHAR(64)   DEFAULT NULL COMMENT '到期时间(原样保存)',
+    `raw_data`    TEXT          DEFAULT NULL COMMENT '原始信息',
+    `created_by`  VARCHAR(64)   DEFAULT NULL COMMENT '录入人(登录账号)',
+    `create_time` DATETIME      DEFAULT NULL COMMENT '创建时间',
+    `update_time` DATETIME      DEFAULT NULL COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    KEY `idx_supplier_ip` (`ip`),
+    KEY `idx_supplier_region` (`region`),
+    KEY `idx_supplier_created_by` (`created_by`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='供应商表';
+
 
 -- ---------- 已有库的增量迁移（下列 ALTER 截至 2026-09-18 均已应用到生产库）----------
 -- 新库直接看上面的 CREATE TABLE 即为最新完整结构；以下仅供已存在的旧库升级参考。
@@ -166,3 +205,9 @@ CREATE TABLE IF NOT EXISTS `apple_code_log` (
 --   ALTER TABLE apple_hide_email
 --       DROP KEY idx_redirect_email, DROP KEY idx_google_alias_email,
 --       DROP COLUMN redirect_email, DROP COLUMN google_alias_email;
+--
+-- [2026-10-12] 新增 Claude 账号录入模块：直接执行上面 claude_account 段 CREATE TABLE
+-- 即可（含 IF NOT EXISTS，重跑安全）。生产库发版前需先建表。
+--
+-- [2026-10-12] 新增供应商管理模块：直接执行上面 supplier 段 CREATE TABLE
+-- 即可（含 IF NOT EXISTS，重跑安全）。生产库发版前需先建表。
