@@ -4,7 +4,7 @@
     <div class="page-head">
       <span class="eyebrow">Suppliers</span>
       <h1 class="display">供应商管理</h1>
-      <p class="lede">按「IP : 端口 : 用户名 : 密码 : 地区 : 到期时间」格式批量粘贴，自动拆分字段入库。</p>
+      <p class="lede">按「IP : 端口 : 用户名 : 密码 : 地区 : 到期时间」格式批量粘贴，冒号 / 空格 / 换行分隔均可，自动拆分字段入库。</p>
     </div>
 
     <!-- 统计磁贴 -->
@@ -51,8 +51,9 @@
         <el-button v-if="isCustomOrder" text size="small" class="reset-btn" @click="resetOrder">恢复默认</el-button>
       </div>
       <div class="schema-hint">
-        拖拽色块调整顺序（也可聚焦后按 ← / →）；一行一条，按冒号（<code>:</code>）切段，
-        第 N 段写入上面第 N 个字段；段数不够的字段留空，最后一段吞掉剩余原文（到期时间里的 <code>HH:mm</code> 不会被拆开）。
+        拖拽色块调整顺序（也可聚焦后按 ← / →）；分隔符可以是冒号、空格或换行，地区与日期可连写（如 <code>菲律宾11.11到期</code>），
+        「到期」二字自动去掉。以 IP 开头的行开始一条新记录，下一行的地区 / 到期时间会并入同一条；
+        第 N 段写入上面第 N 个字段，段数不够的字段留空，最后一段吞掉剩余原文。
         <span v-if="isCustomOrder" class="custom-flag">已自定义</span>
       </div>
 
@@ -283,16 +284,37 @@ function buildPayload() {
 }
 
 const placeholder =
-  '示例：\n203.0.113.10:1080:user01:Pass123:US:2026-12-31'
+  '示例：\n203.0.113.10:1337:user01:Pass123\n迪拜 11.11 到期\n198.51.100.24:1337:user02:Pass456\n菲律宾11.11到期'
 const EXAMPLE = [
-  '203.0.113.10:1080:alice:Pa55w0rd:US:2026-12-31',
-  '198.51.100.24:8000:bob:Bob#2024:JP:2027-01-15 23:59:59'
+  '203.0.113.10:1337:ocpmp7brv92y:0aoa5he27bc3',
+  '迪拜 11.11  到期',
+  '198.51.100.24:1337:3b3avv8vnkn0:r30buogfg948',
+  '菲律宾11.11到期',
+  '192.0.2.8:8000:alice:Pa55w0rd:US:2027-01-15 23:59:59'
 ].join('\n')
 
-/** 到期时间能被识别且早于当前时间则视为已过期（格式不规范的不标红）。 */
+/**
+ * 到期时间早于当前时间则视为已过期，识别不了的不标红。
+ * 支持「2026-12-31 [23:59:59]」（- / . 分隔均可）和不带年份的「11.11」「11-11」：
+ * 不带年份时取今年，若已过去超过半年则视为明年（跨年录入的情况）。
+ */
 function isExpired(v) {
-  const t = Date.parse(String(v).trim().replace(' ', 'T'))
-  return !Number.isNaN(t) && t < Date.now()
+  const s = String(v).trim()
+  let m = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/)
+  let end
+  if (m) {
+    // 只写日期的按当天 23:59:59 到期
+    end = m[4] != null
+      ? new Date(+m[1], m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0))
+      : new Date(+m[1], m[2] - 1, +m[3], 23, 59, 59)
+  } else if ((m = s.match(/^(\d{1,2})[-/.](\d{1,2})$/))) {
+    const now = new Date()
+    end = new Date(now.getFullYear(), m[1] - 1, +m[2], 23, 59, 59)
+    if (now - end > 183 * 864e5) end.setFullYear(end.getFullYear() + 1)
+  } else {
+    return false
+  }
+  return !Number.isNaN(end.getTime()) && end < Date.now()
 }
 
 const rawData = ref('')
