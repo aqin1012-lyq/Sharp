@@ -26,17 +26,23 @@ public class ClaudeAccountController {
     /** 解析预览（不落库） */
     @PostMapping("/parse")
     public Result<List<ClaudeAccount>> parse(@Valid @RequestBody ClaudeParseRequest req) {
-        return Result.ok(service.parse(req.getRawData()));
+        return Result.ok(service.parse(req.getRawData(), req.getFields()));
     }
 
-    /** 解析并保存。录入人取自登录用户。 */
+    /** 查重（不落库）：返回重复 / 新数据条数与重复行。 */
+    @PostMapping("/check")
+    public Result<com.sharp.dto.ClaudeDupCheck> check(@Valid @RequestBody ClaudeParseRequest req) {
+        return Result.ok(service.check(req.getRawData(), req.getFields()));
+    }
+
+    /** 解析并保存。录入人取自登录用户。skipDuplicates=true 时跳过重复。 */
     @PostMapping("/save")
     public Result<List<ClaudeAccount>> save(@Valid @RequestBody ClaudeParseRequest req) {
         String createdBy = CurrentUser.get();
         if (createdBy == null || createdBy.isBlank()) {
             createdBy = "unknown";
         }
-        return Result.ok(service.parseAndSave(req.getRawData(), createdBy));
+        return Result.ok(service.parseAndSave(req.getRawData(), req.getFields(), req.isSkipDuplicates(), createdBy));
     }
 
     /** 分页查询 */

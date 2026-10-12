@@ -4,6 +4,10 @@ export function parseClaude(data) {
   return request.post('/claude/parse', data)
 }
 
+export function checkClaude(data) {
+  return request.post('/claude/check', data)
+}
+
 export function saveClaude(data) {
   return request.post('/claude/save', data)
 }

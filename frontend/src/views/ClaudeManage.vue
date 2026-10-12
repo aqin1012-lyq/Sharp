@@ -25,16 +25,35 @@
         </div>
       </template>
 
-      <!-- 字段说明 -->
-      <div class="schema">
-        <template v-for="(f, i) in fields" :key="f.key">
-          <span class="chip"><span class="pos">{{ i + 1 }}</span>{{ f.label }}</span>
-          <span v-if="i < fields.length - 1" class="sep">----</span>
-        </template>
+      <!-- 字段顺序：可拖拽调整，第 N 段写入第 N 个字段 -->
+      <div class="schema-row">
+        <div ref="schemaEl" class="schema">
+          <template v-for="(f, i) in orderedFields" :key="f.key">
+            <span
+              class="chip"
+              :class="{ dragging: dragIndex === i, over: overIndex === i && dragIndex !== i && dragIndex !== -1 }"
+              draggable="true"
+              tabindex="0"
+              :title="`${f.label}：拖拽调整顺序，或聚焦后按 ← / →`"
+              @dragstart="onDragStart(i, $event)"
+              @dragover="onDragOver(i, $event)"
+              @dragleave="onDragLeave(i)"
+              @drop.prevent="onDrop(i)"
+              @dragend="onDragEnd"
+              @keydown="onChipKeydown(i, $event)"
+            >
+              <el-icon class="grip"><Rank /></el-icon>
+              <span class="pos">{{ i + 1 }}</span>{{ f.label }}
+            </span>
+            <span v-if="i < orderedFields.length - 1" class="sep">----</span>
+          </template>
+        </div>
+        <el-button v-if="isCustomOrder" text size="small" class="reset-btn" @click="resetOrder">恢复默认</el-button>
       </div>
       <div class="schema-hint">
-        一行一条，按 2 个及以上连字符（<code>----</code>）切段，第 N 段写入上面第 N 个字段；
-        段数不够的字段留空，最后一段（ID）吞掉剩余原文。SK 内部的单个 <code>-</code> 不受影响。
+        拖拽色块调整顺序（也可聚焦后按 ← / →）；一行一条，按 2 个及以上连字符（<code>----</code>）切段，
+        第 N 段写入上面第 N 个字段；段数不够的字段留空，最后一段吞掉剩余原文，SK 内部的单个 <code>-</code> 不受影响。
+        <span v-if="isCustomOrder" class="custom-flag">已自定义</span>
       </div>
 
       <!-- 操作栏 -->
@@ -72,7 +91,7 @@
             <el-table v-if="previewList.length" :data="previewList" border size="small" style="width: 100%">
               <el-table-column type="index" label="#" width="46" align="center" />
               <el-table-column
-                v-for="col in fields"
+                v-for="col in orderedFields"
                 :key="col.key"
                 :label="col.label"
                 :min-width="col.width || 140"
@@ -118,7 +137,7 @@
       <el-table :data="tableData" border v-loading="loading" size="small" style="width: 100%">
         <el-table-column prop="id" label="ID" width="70" fixed />
         <el-table-column
-          v-for="col in fields"
+          v-for="col in FIELD_DEFS"
           :key="col.key"
           :prop="col.key"
           :label="col.label"
@@ -161,18 +180,106 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
-import { parseClaude, saveClaude, listClaude, deleteClaude } from '../api/claude'
+import { ref, reactive, computed, nextTick, onMounted } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Rank } from '@element-plus/icons-vue'
+import { parseClaude, checkClaude, saveClaude, listClaude, deleteClaude } from '../api/claude'
 
-// 字段定义：key 与后端 ClaudeAccount 同名，顺序即解析顺序
-const fields = [
+// 字段定义：key 与后端 ClaudeAccount 同名；FIELD_DEFS 是默认顺序，列表表格按此固定展示
+const FIELD_DEFS = [
   { key: 'claudeAccount', label: 'Claude 账号', width: 200 },
   { key: 'email', label: '邮箱账号', width: 200 },
   { key: 'emailPassword', label: '邮箱密码', width: 140 },
   { key: 'sk', label: 'SK', width: 260 },
   { key: 'accountId', label: 'ID', width: 160 }
 ]
+const DEFAULT_KEYS = FIELD_DEFS.map((f) => f.key)
+
+/* —— 字段顺序：可拖拽调整，记在 localStorage —— */
+const ORDER_KEY = 'sharp:claude-field-order:v1'
+const samePermutation = (a, b) =>
+  Array.isArray(a) && a.length === b.length && [...a].sort().join() === [...b].sort().join()
+
+function loadOrder() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(ORDER_KEY) || 'null')
+    // 只接受“同一批字段换了顺序”的记录，字段增删过就退回默认
+    if (samePermutation(saved, DEFAULT_KEYS)) return saved
+  } catch {
+    // 存储损坏 / 不可用时用默认顺序
+  }
+  return [...DEFAULT_KEYS]
+}
+
+const fieldOrder = ref(loadOrder())
+const schemaEl = ref(null)
+const dragIndex = ref(-1)
+const overIndex = ref(-1)
+
+const byKey = new Map(FIELD_DEFS.map((f) => [f.key, f]))
+// 解析预览列跟着拖拽后的顺序走
+const orderedFields = computed(() => fieldOrder.value.map((k) => byKey.get(k)))
+const isCustomOrder = computed(() => fieldOrder.value.join() !== DEFAULT_KEYS.join())
+
+function persistOrder() {
+  try {
+    localStorage.setItem(ORDER_KEY, JSON.stringify(fieldOrder.value))
+  } catch {
+    // 无痕模式等场景下写不进去，不影响本次使用
+  }
+}
+
+function moveField(from, to) {
+  const list = fieldOrder.value
+  if (from < 0 || to < 0 || from >= list.length || to >= list.length || from === to) {
+    return
+  }
+  list.splice(to, 0, list.splice(from, 1)[0])
+  persistOrder()
+  // 顺序变了，之前的预览结果已经对不上
+  previewList.value = []
+}
+
+function onDragStart(i, e) {
+  dragIndex.value = i
+  e.dataTransfer.effectAllowed = 'move'
+  e.dataTransfer.setData('text/plain', String(i))
+}
+function onDragOver(i, e) {
+  e.preventDefault()
+  e.dataTransfer.dropEffect = 'move'
+  overIndex.value = i
+}
+function onDragLeave(i) {
+  if (overIndex.value === i) overIndex.value = -1
+}
+function onDrop(i) {
+  moveField(dragIndex.value, i)
+  onDragEnd()
+}
+function onDragEnd() {
+  dragIndex.value = -1
+  overIndex.value = -1
+}
+function onChipKeydown(i, e) {
+  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+  const to = e.key === 'ArrowLeft' ? i - 1 : i + 1
+  if (to < 0 || to >= fieldOrder.value.length) return
+  e.preventDefault()
+  moveField(i, to)
+  // 焦点跟着色块一起移动，方便连续按键调整
+  nextTick(() => schemaEl.value?.querySelectorAll('.chip')[to]?.focus())
+}
+function resetOrder() {
+  fieldOrder.value = [...DEFAULT_KEYS]
+  persistOrder()
+  previewList.value = []
+}
+
+/** 当前字段顺序随请求发给后端，第 N 段写入第 N 个字段。 */
+function buildPayload() {
+  return { rawData: rawData.value, fields: [...fieldOrder.value] }
+}
 
 const placeholder =
   '示例：\nuser@claude.ai----user@gmail.com----MailPw123----sk-ant-sid02-abc123----acc_0001'
@@ -213,7 +320,7 @@ async function handleParse() {
   }
   parsing.value = true
   try {
-    const res = await parseClaude({ rawData: rawData.value })
+    const res = await parseClaude(buildPayload())
     previewList.value = res.data || []
     if (!previewList.value.length) {
       ElMessage.warning('未解析出有效数据')
@@ -226,10 +333,54 @@ async function handleParse() {
 }
 
 async function handleSave() {
+  if (!lineTotal.value) {
+    ElMessage.warning('请输入原始信息')
+    return
+  }
   saving.value = true
   try {
-    const res = await saveClaude({ rawData: rawData.value })
-    ElMessage.success(`已入库 ${res.data.length} 条`)
+    // 先查重：五字段完全一致（含批内重复）即算重复
+    const chk = (await checkClaude(buildPayload())).data
+    let skipDuplicates = false
+
+    if (chk.dupCount > 0) {
+      // 弹框三选一：仅入库新数据 / 全部入库(含重复) / 取消
+      const preview = (chk.duplicates || []).slice(0, 5).join('\n')
+      const more = chk.duplicates && chk.duplicates.length > 5
+        ? `\n…另有 ${chk.duplicates.length - 5} 条` : ''
+      let action
+      try {
+        await ElMessageBox.confirm(
+          `检测到 ${chk.dupCount} 条与库中已有记录完全重复，新数据 ${chk.newCount} 条。\n\n重复行：\n${preview}${more}`,
+          '发现重复数据',
+          {
+            confirmButtonText: `仅入库新数据（${chk.newCount}）`,
+            cancelButtonText: '全部入库（含重复）',
+            distinguishCancelAndClose: true,
+            type: 'warning',
+            customClass: 'claude-dup-box'
+          }
+        )
+        action = 'confirm' // 仅入库新数据
+      } catch (e) {
+        action = e // 'cancel'（全部入库）或 'close'（取消）
+      }
+
+      if (action === 'close') {
+        ElMessage.info('已取消保存')
+        return
+      }
+      skipDuplicates = action === 'confirm'
+      if (skipDuplicates && chk.newCount === 0) {
+        ElMessage.info('没有新数据可入库')
+        return
+      }
+    }
+
+    const res = await saveClaude({ ...buildPayload(), skipDuplicates })
+    const saved = res.data.length
+    const skipped = chk.total - saved
+    ElMessage.success(skipped > 0 ? `已入库 ${saved} 条，跳过 ${skipped} 条重复` : `已入库 ${saved} 条`)
     rawData.value = ''
     previewList.value = []
     query.page = 1
@@ -321,8 +472,9 @@ onMounted(loadList)
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); display: inline-block; }
 .dot.good { background: var(--good); }
 
-/* 字段说明 chip */
-.schema { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 2px 0; }
+/* 字段顺序 chip（可拖拽排序） */
+.schema-row { display: flex; align-items: flex-start; gap: 8px; }
+.schema { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 2px 0; flex: 1; min-width: 0; }
 .chip {
   display: inline-flex;
   align-items: center;
@@ -335,9 +487,19 @@ onMounted(loadList)
   background: var(--surface-2);
   color: var(--ink);
   white-space: nowrap;
+  cursor: grab;
+  user-select: none;
+  transition: border-color .12s ease, box-shadow .12s ease, opacity .12s ease, transform .12s ease;
 }
+.chip:hover { border-color: var(--accent); }
+.chip:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.chip:active { cursor: grabbing; }
+.chip.dragging { opacity: .4; }
+.chip.over { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); transform: translateY(-1px); }
+.chip .grip { font-size: 11px; color: var(--faint); margin-right: 6px; }
 .chip .pos { color: var(--faint); font-size: 10px; margin-right: 6px; }
-.sep { font-family: var(--mono); color: var(--faint); font-size: 12px; }
+.sep { font-family: var(--mono); color: var(--faint); font-size: 12px; user-select: none; }
+.reset-btn { flex: none; }
 .schema-hint { font-size: 12px; color: var(--faint); line-height: 1.6; margin-top: 6px; }
 .schema-hint code {
   font-family: var(--mono);
@@ -345,6 +507,16 @@ onMounted(loadList)
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: 0 4px;
+}
+.custom-flag {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: 6px;
+  padding: 1px 6px;
+  margin-left: 6px;
 }
 
 .toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 14px 0 12px; }
@@ -417,5 +589,17 @@ onMounted(loadList)
 }
 @media (max-width: 720px) {
   .stats { grid-template-columns: 1fr; }
+}
+</style>
+
+<!-- 非 scoped：ElMessageBox 被 teleport 到 body，scoped 选择器匹配不到 -->
+<style>
+.claude-dup-box .el-message-box__message {
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 260px;
+  overflow: auto;
+  font-size: 13px;
+  line-height: 1.6;
 }
 </style>
