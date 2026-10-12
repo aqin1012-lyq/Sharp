@@ -25,6 +25,10 @@
           <el-icon><Iphone /></el-icon>
           <span>Apple ID 录入</span>
         </el-menu-item>
+        <el-menu-item index="/claude">
+          <el-icon><MagicStick /></el-icon>
+          <span>Claude 账号</span>
+        </el-menu-item>
         <el-menu-item index="/stats">
           <el-icon><DataAnalysis /></el-icon>
           <span>录入统计</span>

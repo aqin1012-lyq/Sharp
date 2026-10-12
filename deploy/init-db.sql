@@ -154,6 +154,25 @@ CREATE TABLE IF NOT EXISTS `apple_code_log` (
     KEY `idx_create_time` (`create_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Apple 接码/切换/检测日志';
 
+-- Claude 账号表：按「claude账号----邮箱账号----邮箱密码----SK----ID」格式拆分入库，
+-- 原始串完整保存在 raw_data 便于追溯。分隔符为 2 个及以上连字符（SK 内部单个 '-' 不受影响）。
+CREATE TABLE IF NOT EXISTS `claude_account` (
+    `id`             BIGINT        NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `claude_account` VARCHAR(255)  DEFAULT NULL COMMENT 'Claude 账号',
+    `email`          VARCHAR(255)  DEFAULT NULL COMMENT '邮箱账号',
+    `email_password` VARCHAR(255)  DEFAULT NULL COMMENT '邮箱密码',
+    `sk`             TEXT          DEFAULT NULL COMMENT 'SK(密钥)',
+    `account_id`     VARCHAR(255)  DEFAULT NULL COMMENT 'ID',
+    `raw_data`       TEXT          DEFAULT NULL COMMENT '原始信息',
+    `created_by`     VARCHAR(64)   DEFAULT NULL COMMENT '录入人(登录账号)',
+    `create_time`    DATETIME      DEFAULT NULL COMMENT '创建时间',
+    `update_time`    DATETIME      DEFAULT NULL COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    KEY `idx_claude_account` (`claude_account`),
+    KEY `idx_claude_email` (`email`),
+    KEY `idx_claude_created_by` (`created_by`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Claude 账号表';
+
 
 -- ---------- 3.1 已有库的增量迁移（下列 ALTER 截至 2026-09-18 均已应用到生产库）----------
 -- 上面的 CREATE TABLE IF NOT EXISTS 对**已存在**的表不生效，老库补列 / 改类型要执行下面这段。

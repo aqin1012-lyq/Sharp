@@ -39,6 +39,12 @@ const routes = [
         meta: { title: 'Apple ID 录入' }
       },
       {
+        path: 'claude',
+        name: 'ClaudeManage',
+        component: () => import('../views/ClaudeManage.vue'),
+        meta: { title: 'Claude 账号' }
+      },
+      {
         path: 'stats',
         name: 'StatsEntry',
         component: () => import('../views/StatsEntry.vue'),
